@@ -15,11 +15,22 @@ Usage:
 
 Script 4 note: use recovery records with recovery_terminated_by == "natural" only for REI.
 
-# GPU SETUP (DeployGPU A100, CUDA 12.8 driver):
-# pip install torch --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
-# pip uninstall vllm -y && pip install vllm  # reinstall after torch cu128
-# Verify: python -c "import torch; print(torch.cuda.is_available())"
-# Then set backend: vllm and batch_size: 32 in configs/experiment.yaml
+GPU one-task verification (run FIRST before any pilot/full sweep):
+  python scripts/run_perturbed.py --config configs/experiment.yaml \\
+      --scope pilot_gpu --domain math --limit 1
+  Inspect raw_output in data/perturbed_runs.jsonl to verify:
+  1. Prefill continuation — the stop-variant output should begin with the
+     expected answer format (e.g. "\\boxed{...}"), not re-emit the prefill.
+  2. Recovery trace quality — the recovery-variant should show coherent
+     reasoning after the injection note.
+  3. <think> wrapping — with reasoning_model: true the baseline prefix in the
+     assistant turn should be wrapped in <think>...</think> tags.
+
+GPU SETUP (DeployGPU A100, CUDA 12.8 driver):
+  pip install torch --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+  pip uninstall vllm -y && pip install vllm  # reinstall after torch cu128
+  Verify: python -c "import torch; print(torch.cuda.is_available())"
+  Then set backend: vllm and batch_size: 32 in configs/experiment.yaml
 """
 
 from __future__ import annotations
@@ -176,40 +187,6 @@ def resolve_injection_steps(
     raise KeyError(f"Missing injection for {key} (run Script 2 or use --dry-run)")
 
 
-def run_stop_variant(
-    backend,
-    messages: list[dict],
-    domain: str,
-    model_cfg: dict,
-) -> tuple[str, int, str | None]:
-    prefill = STOP_PREFILL.get(domain, STOP_PREFILL["math"])
-    max_new = int(model_cfg.get("max_new_tokens", 2048))
-    result = backend.generate_chat(
-        messages,
-        max_new_tokens=max_new,
-        temperature=float(model_cfg.get("temperature", 0.6)),
-        top_p=float(model_cfg.get("top_p", 0.95)),
-        prefill=prefill,
-    )
-    return result.text, result.completion_tokens, result.finish_reason
-
-
-def run_recovery_variant(
-    backend,
-    messages: list[dict],
-    model_cfg: dict,
-    recovery_max_tokens: int,
-) -> tuple[str, int, str | None]:
-    result = backend.generate_chat(
-        messages,
-        max_new_tokens=recovery_max_tokens,
-        temperature=float(model_cfg.get("temperature", 0.6)),
-        top_p=float(model_cfg.get("top_p", 0.95)),
-        prefill=None,
-    )
-    return result.text, result.completion_tokens, result.finish_reason
-
-
 def build_output_record(
     *,
     task: dict,
@@ -287,6 +264,11 @@ def flush_batch(
     Process one collected batch: call generate_chat_batch(), write records.
 
     batch items are dicts with keys: messages, prefill, meta, variant, domain.
+
+    This is the canonical inference path — all stop and recovery variants are
+    dispatched through here (via maybe_flush in main).  Prefill selection uses
+    select_stop_prefill(domain, eval_type) in the main loop before items are
+    added to the batch; do NOT duplicate that logic here.
     """
     if not batch:
         return

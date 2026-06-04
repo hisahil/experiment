@@ -74,28 +74,46 @@ def messages_to_prompt(
     *,
     prefill: str | None = None,
 ) -> str:
-    """Render chat messages to a single prompt string, optionally continuing assistant text."""
+    """Render chat messages to a single prompt string, optionally continuing assistant text.
+
+    Chat-template prefill strategy: when *prefill* is supplied we append it as
+    a partial assistant message **before** calling ``apply_chat_template`` and
+    set ``add_generation_prompt=False``.  This ensures the prefill lands inside
+    the assistant turn delimiters (e.g. DeepSeek-R1's ``<|assistant|>`` block)
+    rather than being naively concatenated after the generation-prompt marker,
+    which would place it outside the expected turn for many chat templates.
+    """
     prompt: str | None = None
+
+    # When prefill is provided, inject it as a partial assistant message so the
+    # chat template wraps it correctly inside the assistant turn.
+    if prefill:
+        template_messages = list(messages) + [{"role": "assistant", "content": prefill}]
+        add_gen_prompt = False
+    else:
+        template_messages = messages
+        add_gen_prompt = True
+
     if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
         try:
             prompt = tokenizer.apply_chat_template(
-                messages,
+                template_messages,
                 tokenize=False,
-                add_generation_prompt=True,
+                add_generation_prompt=add_gen_prompt,
             )
         except (TypeError, ValueError, NotImplementedError):
             try:
-                prompt = tokenizer.apply_chat_template(messages, tokenize=False)
-                if not prompt.rstrip().endswith(("assistant", "Assistant")):
+                prompt = tokenizer.apply_chat_template(template_messages, tokenize=False)
+                if not prefill and not prompt.rstrip().endswith(("assistant", "Assistant")):
                     prompt = prompt.rstrip() + "\nassistant\n"
             except (TypeError, ValueError, NotImplementedError):
                 prompt = None
 
     if prompt is None:
         prompt = _manual_chat_prompt(messages)
+        if prefill:
+            prompt = f"{prompt}{prefill}"
 
-    if prefill:
-        prompt = f"{prompt}{prefill}"
     return prompt
 
 

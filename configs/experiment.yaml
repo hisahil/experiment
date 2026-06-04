@@ -8,9 +8,17 @@ experiment:
   name: exp1_perturbed_cot
   seed: 42
 
+# ──────────────────────────────────────────────────────────────────────
+# BACKEND NOTE: `backend` (below) and `script3.backend` are currently
+# set to `transformers` for local Mac CPU/MPS testing.  Once the
+# CUDA 12.8 fix is applied on the GPU node (see run_perturbed.py
+# docstring), switch BOTH to `vllm` for production throughput:
+#   model.backend: vllm
+#   script3.backend: vllm
+# ──────────────────────────────────────────────────────────────────────
 model:
   name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
-  backend: transformers
+  backend: transformers          # → vllm after CUDA 12.8 fix on GPU
   dtype: auto
   max_new_tokens: 2048
   temperature: 0.6
@@ -29,12 +37,15 @@ script3:
   output_file: data/perturbed_runs.jsonl
   variants: [stop, recovery]
   recovery_max_tokens: 8192
-  # Pilot: false; set true for DeepSeek-R1 / QwQ think-block wrapping (validate on GPU)
-  reasoning_model: false
+  # DeepSeek-R1-Distill is a reasoning model: it emits <think>...</think> blocks.
+  # The baseline CoT prefix must be wrapped in <think> tags so the model treats
+  # it as a continuation of its own reasoning trace, not as user-supplied text.
+  # PILOT VALIDATION: compare raw_output with reasoning_model true vs false on 1 task
+  reasoning_model: true
   # vLLM batching (Approach A): prompts per vLLM call; set 1 for transformers/dry-run
   # After CUDA 12.8 fix (see run_perturbed.py docstring), set backend: vllm below and use 32+
   batch_size: 32
-  backend: transformers  # switch to vllm once CUDA 12.8 fix is applied on GPU node
+  backend: transformers           # → vllm after CUDA 12.8 fix on GPU
 
 paths:
   tasks: data/experiment_tasks.jsonl

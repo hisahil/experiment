@@ -33,23 +33,43 @@ def build_perturbed_messages(
     injection_steps: list[str],
     *,
     reasoning_model: bool = False,
+    trace_in_user_turn: bool = False,
 ) -> list[Message]:
     """
-    Multi-turn dialog (Option A): baseline prefix as assistant turn, injections as user note.
+    Build the multi-turn dialog for a perturbed run.
 
-    Reasoning models (DeepSeek-R1, QwQ) may emit ... blocks — pilot validation
-    may require wrapping baseline_prefix when reasoning_model=True (experimental).
+    Multi-agent mapping: the baseline prefix is the receiving model's OWN prior
+    reasoning, the collaborating-agent note is the EXTERNAL agent's contribution,
+    and the model then continues (recovery) or is asked to stop.
+
+    The prefix is placed as plain visible text and is never wrapped in
+    <think>...</think>. DeepSeek-R1-Distill's chat template keeps only the text
+    after </think> for every assistant turn in history (it runs
+    content.split('</think>')[-1]), so wrapping the prefix would delete it from
+    the prompt entirely. DeepSeek also documents that historical reasoning is
+    dropped from context on purpose, so there is no supported way to feed a hidden
+    reasoning trace back on a later turn. The template opens its own <think> block
+    on the generation turn via add_generation_prompt, so we leave think-handling
+    to it rather than injecting tags that the template would strip.
     """
-    assistant_content = baseline_prefix
-    if reasoning_model:
-        # Experimental: wrap prior CoT for DeepSeek-R1 / QwQ — validate on GPU before full run.
-        t_open, t_close = "<" + "think" + ">", "</" + "think" + ">"
-        assistant_content = f"{t_open}\n{baseline_prefix}\n{t_close}"
+    note = format_collaborating_note(injection_steps)
 
+    # Folding everything into one user turn sidesteps assistant-history handling
+    # completely, for cases where even a plain assistant-turn prefix is unwanted.
+    if trace_in_user_turn:
+        combined = (
+            f"{problem}\n\n"
+            f"Reasoning so far from a collaborating agent:\n{baseline_prefix}\n\n"
+            f"{note}"
+        )
+        return [{"role": "user", "content": combined}]
+
+    # Presenting the prefix as the model's own prior visible turn keeps the
+    # external/internal split intact and survives every chat template we use.
     return [
         {"role": "user", "content": problem},
-        {"role": "assistant", "content": assistant_content},
-        {"role": "user", "content": format_collaborating_note(injection_steps)},
+        {"role": "assistant", "content": baseline_prefix},
+        {"role": "user", "content": note},
     ]
 
 

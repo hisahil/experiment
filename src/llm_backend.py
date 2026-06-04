@@ -96,11 +96,29 @@ def messages_to_prompt(
 
     if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
         try:
-            prompt = tokenizer.apply_chat_template(
-                template_messages,
-                tokenize=False,
-                add_generation_prompt=add_gen_prompt,
-            )
+            if prefill:
+                # Preferred: continue_final_message avoids spurious EOT tokens inside the prefill
+                # (e.g. <|eot_id|> after the prefill text in Llama-3 templates).
+                try:
+                    prompt = tokenizer.apply_chat_template(
+                        template_messages,
+                        tokenize=False,
+                        add_generation_prompt=False,
+                        continue_final_message=True,
+                    )
+                except TypeError:
+                    # Older tokenizer versions lack continue_final_message — fall back.
+                    prompt = tokenizer.apply_chat_template(
+                        template_messages,
+                        tokenize=False,
+                        add_generation_prompt=False,
+                    )
+            else:
+                prompt = tokenizer.apply_chat_template(
+                    template_messages,
+                    tokenize=False,
+                    add_generation_prompt=add_gen_prompt,
+                )
         except (TypeError, ValueError, NotImplementedError):
             try:
                 prompt = tokenizer.apply_chat_template(template_messages, tokenize=False)
@@ -440,9 +458,10 @@ class VLLMBackend(BaseBackend):
             top_p=top_p,
         )
         outputs = self.llm.generate([prompt], params)
-        result = outputs[0].outputs[0]
+        output = outputs[0]  # RequestOutput — carries prompt_token_ids
+        result = output.outputs[0]  # CompletionOutput — carries token_ids / text
         elapsed = time.time() - start
-        prompt_tokens = len(result.prompt_token_ids or [])
+        prompt_tokens = len(output.prompt_token_ids or [])
         completion_tokens = len(result.token_ids or [])
         finish = getattr(result, "finish_reason", None) or (
             "length" if completion_tokens >= max_new_tokens else "stop"

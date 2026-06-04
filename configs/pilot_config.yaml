@@ -21,7 +21,7 @@ script3:
   output_file: data/perturbed_runs.jsonl
   variants: [stop, recovery]
   recovery_max_tokens: 8192
-  reasoning_model: false
+  reasoning_model: true  # DeepSeek-R1-Distill-Qwen-32B is a reasoning model
 
 paths:
   tasks: data/experiment_tasks.jsonl

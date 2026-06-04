@@ -1,0 +1,30 @@
+# Core
+pyyaml>=6.0
+python-dotenv>=1.0
+
+# Inference — pinned for CUDA 12.1/12.8 compatibility (driver 570, CUDA 12.8)
+# Install torch separately: pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1
+transformers>=4.44.0,<5.0
+accelerate>=0.33.0
+vllm==0.6.6
+
+# Hugging Face
+huggingface-hub>=0.24.0
+
+# Evaluation (Script 4)
+numpy>=1.26.0
+pandas>=2.1.0
+openpyxl>=3.1.0
+scipy>=1.11.0
+
+# Benchmark task preparation (local: prepare_tasks.py)
+datasets>=2.14.0
+sympy>=1.12
+
+# Injection generation (Script 2 — generate_injections.py)
+anthropic>=0.40.0
+
+# Baseline CoT generation (Script 1 — optional spaCy segmentation fallback)
+# After install: python -m spacy download en_core_web_sm
+spacy>=3.7.0

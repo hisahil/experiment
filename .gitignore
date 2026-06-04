@@ -1,0 +1,33 @@
+outputs/*
+!outputs/.gitkeep
+logs/*
+!logs/.gitkeep
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+*.egg-info/
+.cache/
+models/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Large / generated datasets (keep on disk, not in git)
+data/gsm8k/
+data/math500/
+data/mmlu/
+data/experiment_tasks*.jsonl
+data/baseline_cots*.jsonl
+data/injections_generated*.jsonl
+data/perturbed_runs*.jsonl
+data/pilot_tasks.jsonl
+data/smoke_tasks.jsonl
+data/injections.json
+data/injection_templates.json
+
+# Experiment outputs (tracked placeholder only)
+results/*
+!results/.gitkeep

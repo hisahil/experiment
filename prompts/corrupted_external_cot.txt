@@ -1,0 +1,15 @@
+You are the receiving agent in a multi-agent reasoning system.
+
+Another agent has already produced the following reasoning trace:
+
+{external_reasoning}
+
+Continue from this reasoning trace. Check whether it is reliable. Correct any mistakes if needed.
+
+Task:
+{task}
+
+Show your reasoning in clear numbered steps.
+
+At the end write exactly one line in this format:
+Final answer: <answer>

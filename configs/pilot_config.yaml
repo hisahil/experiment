@@ -1,0 +1,73 @@
+# Pilot run — same pipeline as full experiment, scope limited to 50 tasks
+# Prefer: python src/run_experiment.py --scope pilot
+# Also:   python src/run_pilot.py
+
+experiment:
+  name: pilot
+  seed: 42
+
+model:
+  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  backend: transformers
+  dtype: auto
+  max_new_tokens: 2048
+  temperature: 0.6
+  top_p: 0.95
+
+# Script 3 entry: python scripts/run_perturbed.py --config configs/pilot_config.yaml --scope pilot
+script3:
+  baseline_file: data/baseline_cots.jsonl
+  injections_file: data/injections_generated.jsonl
+  output_file: data/perturbed_runs.jsonl
+  variants: [stop, recovery]
+  recovery_max_tokens: 8192
+  reasoning_model: false
+
+paths:
+  tasks: data/experiment_tasks.jsonl
+  injections: data/injections_generated.jsonl
+  prompts:
+    baseline: prompts/baseline.txt
+    recovery: prompts/corrupted_external_cot.txt
+    stop: prompts/stop_after_corruption.txt
+  outputs: outputs
+  logs: logs
+
+injection:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  placement: midpoint
+  generated_file: data/injections_generated.jsonl
+
+design:
+  variants: [baseline, stop, recovery]
+  error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+  k_injections: [1, 3, 5]
+  length_levels: [short, long]
+  seeds: [42, 43, 44]
+
+active_scope: pilot
+
+scopes:
+  pilot:
+    description: "50 tasks, 1 seed, k=1, short"
+    max_tasks_total: 50
+    domains: [math, science, code]
+    variants: [baseline, stop, recovery]
+    error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+    k_injections: [1]
+    length_levels: [short]
+    seeds: [42]
+  full:
+    description: "Thesis full run"
+    max_per_domain: 80
+    domains: [math, science, code]
+    variants: [baseline, stop, recovery]
+    error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+    k_injections: [1, 3, 5]
+    length_levels: [short, long]
+    seeds: [42, 43, 44]
+
+logging:
+  save_raw_outputs: true
+  runs_file: pilot_runs.jsonl

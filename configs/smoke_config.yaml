@@ -1,0 +1,40 @@
+# GPU SMOKE TEST — infrastructure check only, not science
+# DeepSeek first (same model as thesis main experiment)
+# Run: python src/run_pilot.py --config configs/smoke_config.yaml
+
+experiment:
+  name: gpu_smoke
+  seed: 42
+
+model:
+  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  backend: transformers
+  dtype: auto
+  max_new_tokens: 1024
+  temperature: 0.6
+  top_p: 0.95
+
+paths:
+  tasks: data/smoke_tasks.jsonl
+  injections: data/injections.json
+  prompts:
+    baseline: prompts/baseline.txt
+    recovery: prompts/corrupted_external_cot.txt
+    stop: prompts/stop_after_corruption.txt
+  outputs: outputs
+  logs: logs
+
+run:
+  mode: smoke
+  max_tasks: 3
+  variants:
+    - baseline
+    - recovery
+  error_types:
+    - incorrect_reasoning
+  k_injections: 1
+  length_level: short
+
+logging:
+  save_raw_outputs: true
+  runs_file: smoke_runs.jsonl

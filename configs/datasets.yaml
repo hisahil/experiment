@@ -1,0 +1,69 @@
+# Task pool preparation — builds data/experiment_tasks.jsonl
+# Run: python scripts/prepare_tasks.py --config configs/datasets.yaml
+#
+# MATH-500 (primary math benchmark):
+#   python scripts/prepare_tasks.py --config configs/datasets.yaml \
+#     --output data/experiment_tasks_math500.jsonl
+#
+# GSM8K fallback (swap math.dataset to gsm8k or use math_gsm8k block below):
+#   set domains.math.dataset: gsm8k and domains.math.hf_path: openai/gsm8k
+#
+# Science: SciBench (primary, open-ended numeric) with MMLU-STEM as the
+#   science_mmlu fallback block. Logic (Knights-and-Knaves) is OPTIONAL.
+
+seed: 42
+output: data/experiment_tasks.jsonl
+
+# Target pool size per domain (full corpus cap; scope limits apply at run time)
+domains:
+  math:
+    dataset: math500
+    hf_path: HuggingFaceH4/MATH-500
+    split: test
+    max_examples: 80
+    levels: [4, 5]
+  math_gsm8k:
+    dataset: gsm8k
+    hf_path: openai/gsm8k
+    config: main
+    split: test
+    max_examples: 80
+  # Science (primary): SciBench — college physics/chemistry/math, OPEN-ENDED
+  # numeric answers (NOT MCQ). Graded by numeric tolerance (relative ~1e-4).
+  science:
+    dataset: scibench
+    hf_path: xw27/scibench
+    config: default
+    split: train
+    max_examples: 80
+  # Science fallback (MCQ): MMLU-STEM. Used by sample_mmlu when science.dataset
+  # is not scibench (mirror of math_gsm8k). Switch by setting science.dataset:
+  # mmlu and copying the hf_path/subjects below into the science block.
+  science_mmlu:
+    dataset: mmlu
+    hf_path: cais/mmlu
+    config: all
+    subjects:
+      - high_school_physics
+      - high_school_chemistry
+      - college_biology
+      - college_physics
+      - college_chemistry
+    split: test
+    max_examples: 80
+  code:
+    dataset: mbpp
+    hf_path: google-research-datasets/mbpp
+    split: test
+    max_examples: 80
+  # Logic (OPTIONAL / pilot-only): Knights-and-Knaves. The thesis may stay at 2
+  # domains (math + science); set enabled: false to drop logic from the pool.
+  # Difficulty = number of characters per puzzle (n_people); pilot uses 3-5.
+  # Graded judge-free by exact match on the role tuple (logic eval_type).
+  logic:
+    enabled: true
+    dataset: knights_knaves
+    hf_path: K-and-K/knights-and-knaves
+    split: test
+    n_people: [3, 4, 5]
+    max_examples: 24

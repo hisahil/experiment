@@ -1,0 +1,174 @@
+# Experiment 1 — full pipeline (scope limits control pilot vs full run)
+#
+# Pilot:  python src/run_experiment.py --config configs/experiment.yaml
+# Dry-run: python src/run_experiment.py --config configs/experiment.yaml --dry-run
+# Full:   set active_scope: full (or --scope full)
+
+experiment:
+  name: exp1_perturbed_cot
+  seed: 42
+
+model:
+  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  backend: transformers
+  dtype: auto
+  max_new_tokens: 2048
+  temperature: 0.6
+  top_p: 0.95
+
+# Baseline CoT generation (Script 1)
+baseline:
+  generated_file: data/baseline_cots.jsonl
+  max_retries: 5
+  min_steps: 3
+
+# Perturbed CoT runs (Script 3) — python scripts/run_perturbed.py
+script3:
+  baseline_file: data/baseline_cots.jsonl
+  injections_file: data/injections_generated.jsonl
+  output_file: data/perturbed_runs.jsonl
+  variants: [stop, recovery]
+  recovery_max_tokens: 8192
+  # Pilot: false; set true for DeepSeek-R1 / QwQ think-block wrapping (validate on GPU)
+  reasoning_model: false
+  # vLLM batching (Approach A): prompts per vLLM call; set 1 for transformers/dry-run
+  # After CUDA 12.8 fix (see run_perturbed.py docstring), set backend: vllm below and use 32+
+  batch_size: 32
+  backend: transformers  # switch to vllm once CUDA 12.8 fix is applied on GPU node
+
+paths:
+  tasks: data/experiment_tasks.jsonl
+  injections: data/injections_generated.jsonl
+  prompts:
+    baseline: prompts/baseline.txt
+    recovery: prompts/corrupted_external_cot.txt
+    stop: prompts/stop_after_corruption.txt
+  outputs: outputs
+  logs: logs
+
+# Injection generation (Script 2)
+injection:
+  provider: anthropic
+  model: claude-sonnet-4-6   # Claude Sonnet 4.6; NOT one of the 3 experiment models
+  placement: midpoint               # inject at floor(n/2) of baseline CoT
+  generated_file: data/injections_generated.jsonl
+
+# Full factorial design (what the thesis measures)
+# Exactly three error types are used. incorrect_reasoning also covers
+# hallucinated intermediate claims; do not add a separate hallucinated_fact type.
+design:
+  variants:
+    - baseline
+    - stop
+    - recovery
+  error_types:
+    - incorrect_reasoning
+    - paraphrased_shift
+    - off_topic
+  k_injections: [1, 3, 5]
+  length_levels: [short, long]
+  seeds: [42, 43, 44]
+
+# Supplementary position analysis (separate run on subset)
+supplementary_positions:
+  description: "1 model × 1 domain × k=3 × 3 positions = ~1,440 traces"
+  model: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  domain: math
+  k: 3
+  positions: [0.25, 0.50, 0.75]   # relative to baseline CoT length
+  config: configs/supplementary_positions.yaml
+
+# Active slice — change only this block (or use --scope CLI)
+active_scope: pilot
+
+scopes:
+  smoke:
+    # Use configs/smoke_config.yaml + run_experiment.py --legacy-smoke instead
+    description: "3 tasks, infra only"
+  pilot:
+    description: "Feasibility: 50 tasks, 1 seed, k=1, short traces"
+    max_tasks_total: 50
+    max_per_domain: null
+    domains: [math, science, code]
+    variants: [baseline, stop, recovery]
+    error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+    k_injections: [1]
+    length_levels: [short]
+    seeds: [42]
+  full:
+    description: "Thesis Exp 1 target (per domain cap; adjust to proposal)"
+    max_tasks_total: null
+    max_per_domain: 80
+    domains: [math, science, code]
+    variants: [baseline, stop, recovery]
+    error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+    k_injections: [1, 3, 5]
+    length_levels: [short, long]
+    seeds: [42, 43, 44]
+  # GPU pilot — reduced design on the MATH-500 + SciBench (+ optional K&K) pool.
+  # Build that pool (does NOT touch data/experiment_tasks.jsonl):
+  #   python scripts/prepare_tasks.py --config configs/datasets.yaml \
+  #     --output data/experiment_tasks_math500.jsonl
+  # Run:
+  #   python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu
+  #   python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu_techcheck
+  #   python scripts/evaluate.py
+  pilot_gpu:
+    description: "GPU pilot: math20/science8/logic8, 3 error types, k{1,3} short, 1 seed, stop+recovery"
+    tasks: data/experiment_tasks_math500.jsonl   # per-scope override (run_perturbed)
+    max_tasks_total: null
+    # Per-domain caps (dict form, handled by experiment_scope.select_tasks).
+    max_per_domain:
+      math: 20
+      science: 8
+      logic: 8          # OPTIONAL: set to 0 here, or drop `logic` from `domains`,
+                        # or set domains.logic.enabled: false in datasets.yaml.
+    domains: [math, science, logic]
+    variants: [stop, recovery]                   # recovery is required for REI
+    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    k_injections: [1, 3]
+    length_levels: [short]
+    seeds: [42]
+    # TECHNICAL CHECK (one k=5 + long combo): the design applies k x length as a
+    # FULL cross product, so a single extra (k=5, long) cell cannot be expressed
+    # inside this block without also generating k=1/3 long and k=5 short. It is
+    # therefore encoded as the sibling scope `pilot_gpu_techcheck` below, run as a
+    # second pass; its rows append to the same perturbed_runs.jsonl.
+  pilot_gpu_techcheck:
+    description: "GPU pilot technical check: the single k=5 + long combo (same tasks/domains as pilot_gpu)"
+    tasks: data/experiment_tasks_math500.jsonl
+    max_tasks_total: null
+    max_per_domain:
+      math: 20
+      science: 8
+      logic: 8
+    domains: [math, science, logic]
+    variants: [stop, recovery]
+    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    k_injections: [5]
+    length_levels: [long]
+    seeds: [42]
+
+# Evaluation + REI analysis (Script 4 — python scripts/evaluate.py)
+script4:
+  input_path: data/perturbed_runs.jsonl       # Script 3 output (variant: stop|recovery)
+  baseline_path: data/baseline_cots.jsonl      # Script 1 output (clean accuracy source)
+  output_dir: results
+  ci_z: 1.96                                    # normal-approx CI half-width multiplier
+  min_recovery_seeds: 2                         # min natural-recovery seeds per task-condition
+  min_denominator_tokens: 10                    # min (tokens_recovery - tokens_stop) for valid REI
+  min_valid_tasks: 60                           # warn if a condition has fewer valid-REI tasks
+  # Difficulty from clean accuracy: easy if >= easy; hard if <= hard; else medium.
+  difficulty_bins:
+    easy: 0.70
+    hard: 0.40
+  # Corruption-rate warning thresholds per error_type (descriptive, NOT gates).
+  sanity_thresholds:
+    incorrect_reasoning: 0.70
+    off_topic: 0.60
+    paraphrased_shift: 0.50
+  math_tolerance: 1.0e-4                         # numeric tolerance for math answers
+
+logging:
+  save_raw_outputs: true
+  runs_file: experiment_runs.jsonl

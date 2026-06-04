@@ -1,0 +1,60 @@
+# Supplementary position analysis — separate run from main Exp 1 factorial
+# 1 model × math domain × k=3 × 3 positions (~1,440 traces)
+#
+# Usage (when Script 3/4 are built):
+#   python src/run_experiment.py --config configs/supplementary_positions.yaml
+
+experiment:
+  name: exp1_position_analysis
+  seed: 42
+
+model:
+  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  backend: transformers
+  dtype: auto
+  max_new_tokens: 2048
+  temperature: 0.6
+  top_p: 0.95
+
+paths:
+  tasks: data/experiment_tasks.jsonl
+  injections: data/injections_generated.jsonl
+  prompts:
+    baseline: prompts/baseline.txt
+    recovery: prompts/corrupted_external_cot.txt
+    stop: prompts/stop_after_corruption.txt
+  outputs: outputs
+  logs: logs
+
+injection:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  placement: custom
+  generated_file: data/injections_generated.jsonl
+
+design:
+  domain: math
+  k: 3
+  positions: [0.25, 0.50, 0.75]   # relative to baseline CoT length
+  variants: [baseline, stop, recovery]
+  error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+  length_levels: [short, long]
+  seeds: [42, 43, 44]
+
+active_scope: full
+
+scopes:
+  full:
+    description: "Position analysis: math only, k=3, 25%/50%/75%"
+    max_per_domain: 80
+    domains: [math]
+    variants: [baseline, stop, recovery]
+    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    k_injections: [3]
+    length_levels: [short, long]
+    seeds: [42, 43, 44]
+    positions: [0.25, 0.50, 0.75]
+
+logging:
+  save_raw_outputs: true
+  runs_file: position_analysis_runs.jsonl

@@ -1,0 +1,11 @@
+# Script 1 — verified baseline CoT generation
+
+tasks: data/experiment_tasks.jsonl
+output: data/baseline_cots.jsonl
+prompt: prompts/baseline_generation.txt
+
+max_retries: 5
+min_steps: 3
+
+# null => use model.name from experiment.yaml
+models: null

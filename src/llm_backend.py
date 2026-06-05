@@ -407,10 +407,28 @@ class TransformersBackend(BaseBackend):
 
 
 class VLLMBackend(BaseBackend):
-    def __init__(self, model_name: str, dtype: str = "auto"):
+    def __init__(
+        self,
+        model_name: str,
+        dtype: str = "auto",
+        *,
+        max_model_len: int | None = None,
+        gpu_memory_utilization: float = 0.90,
+    ):
         from vllm import LLM
 
-        self.llm = LLM(model=model_name, trust_remote_code=True, dtype=dtype)
+        # DeepSeek-R1-Distill defaults to a 131072-token context, which does not
+        # fit the KV cache alongside the 61GB weights on an 80GB GPU. Cap
+        # max_model_len (prompt + generation) so vLLM can allocate the cache.
+        llm_kwargs: dict = {
+            "model": model_name,
+            "trust_remote_code": True,
+            "dtype": dtype,
+            "gpu_memory_utilization": gpu_memory_utilization,
+        }
+        if max_model_len is not None:
+            llm_kwargs["max_model_len"] = int(max_model_len)
+        self.llm = LLM(**llm_kwargs)
         self.model_name = model_name
         self.tokenizer = None
         try:
@@ -506,5 +524,10 @@ def create_backend(model_cfg: dict, dry_run: bool = False) -> BaseBackend:
     if backend == "transformers":
         return TransformersBackend(model_cfg["name"], dtype=model_cfg.get("dtype", "auto"))
     if backend == "vllm":
-        return VLLMBackend(model_cfg["name"], dtype=model_cfg.get("dtype", "auto"))
+        return VLLMBackend(
+            model_cfg["name"],
+            dtype=model_cfg.get("dtype", "auto"),
+            max_model_len=model_cfg.get("max_model_len"),
+            gpu_memory_utilization=float(model_cfg.get("gpu_memory_utilization", 0.90)),
+        )
     raise ValueError(f"Unknown backend: {backend}")

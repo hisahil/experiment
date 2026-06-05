@@ -21,6 +21,11 @@ model:
   max_new_tokens: 2048
   temperature: 0.6
   top_p: 0.95
+  # vLLM KV-cache fit on A100 80GB: the 32B weights take ~61GB, so the model's
+  # native 131072 context cannot fit the KV cache. Cap context (prompt + gen);
+  # 16384 covers recovery_max_tokens (8192) plus the baseline-prefixed prompt.
+  max_model_len: 16384
+  gpu_memory_utilization: 0.92
 
 # Baseline CoT generation (Script 1)
 baseline:

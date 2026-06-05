@@ -15,9 +15,21 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import yaml
+
+
+def _fmt_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -209,6 +221,20 @@ def main() -> None:
     done = 0
     verified_count = 0
     excluded_count = 0
+    remaining_work = total_work - skipped
+    run_start = time.time()
+
+    def print_progress() -> None:
+        if done == 0:
+            return
+        elapsed = time.time() - run_start
+        avg = elapsed / done
+        left = max(0, remaining_work - done)
+        eta = avg * left
+        print(
+            f"    progress: {done}/{remaining_work} | elapsed {_fmt_duration(elapsed)} "
+            f"| avg {avg:.0f}s/task | ETA {_fmt_duration(eta)}"
+        )
 
     for model_name in models:
         run_model_cfg = {**model_cfg, "name": model_name}
@@ -293,6 +319,7 @@ def main() -> None:
                         f"[{status}] {task['task_id']:20s} | {model_name.split('/')[-1]:30s} | "
                         f"steps={step_count} | seg={seg_method} | retry={attempt + 1}"
                     )
+                    print_progress()
                     break
 
             if not success and last_record is not None:
@@ -303,6 +330,7 @@ def main() -> None:
                     f"[FAIL] {task['task_id']:20s} | {model_name.split('/')[-1]:30s} | "
                     f"verified=false after {max_retries} retries (excluded from Script 3)"
                 )
+                print_progress()
 
     print(f"\nDone. Processed: {done} | Verified: {verified_count} | Excluded: {excluded_count}")
     if excluded_count:

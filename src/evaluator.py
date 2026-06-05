@@ -375,8 +375,8 @@ def aggregate_rei(records: list[dict[str, Any]], min_token_delta: int = 1) -> fl
         rei = compute_rei(
             accuracy_recovery=1.0 if record.get("correct") else 0.0,
             accuracy_stop=1.0 if stop.get("correct") else 0.0,
-            tokens_recovery=int(record.get("completion_tokens") or 0),
-            tokens_stop=int(stop.get("completion_tokens") or 0),
+            tokens_recovery=int(record.get("tokens_generated") or 0),
+            tokens_stop=int(stop.get("tokens_generated") or 0),
             min_token_delta=min_token_delta,
         )
         if rei is not None:

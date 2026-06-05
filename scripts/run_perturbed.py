@@ -18,13 +18,21 @@ Script 4 note: use recovery records with recovery_terminated_by == "natural" onl
 GPU one-task verification (run FIRST before any pilot/full sweep):
   python scripts/run_perturbed.py --config configs/experiment.yaml \\
       --scope pilot_gpu --domain math --limit 1
-  Inspect raw_output in data/perturbed_runs.jsonl to verify:
+  Print the RENDERED PROMPT (not just raw_output) to confirm the baseline prefix
+  is visible as plain text in the assistant turn (no <think> tags):
+    from src.llm_backend import build_perturbed_messages, messages_to_prompt
+    # after loading the tokenizer:
+    print(messages_to_prompt(tokenizer, messages))
+  Verify:
   1. Prefill continuation — the stop-variant output should begin with the
      expected answer format (e.g. "\\boxed{...}"), not re-emit the prefill.
   2. Recovery trace quality — the recovery-variant should show coherent
      reasoning after the injection note.
-  3. <think> wrapping — with reasoning_model: true the baseline prefix in the
-     assistant turn should be wrapped in <think>...</think> tags.
+  3. Baseline visibility — the baseline prefix appears as PLAIN TEXT in the
+     assistant turn (no <think>...</think> tags). DeepSeek-R1's chat template
+     opens its own <think> block on the generation turn via add_generation_prompt.
+  4. Fallback: set trace_in_user_turn: true in configs/experiment.yaml if
+     assistant-turn mode produces unexpected template behaviour.
 
 GPU SETUP (DeployGPU A100, CUDA 12.8 driver):
   pip install torch --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
@@ -224,6 +232,7 @@ def build_output_record(
         "midpoint_step": midpoint_step,
         "insertion_step": midpoint_step,
         "domain": domain,
+        "eval_type": eval_type,
     }
     if variant == "recovery":
         record["recovery_terminated_by"] = recovery_terminated_by
@@ -402,6 +411,7 @@ def main() -> None:
     tasks_path = ROOT / paths.get("tasks", "data/experiment_tasks.jsonl")
     recovery_max_tokens = int(script3.get("recovery_max_tokens", 8192))
     reasoning_model = bool(script3.get("reasoning_model", model_cfg.get("reasoning_model", False)))
+    trace_in_user_turn = bool(script3.get("trace_in_user_turn", False))
     variants = list(script3.get("variants", ["stop", "recovery"]))
 
     scope = get_scope(cfg, args.scope)
@@ -541,6 +551,7 @@ def main() -> None:
                             baseline_prefix,
                             injection_steps,
                             reasoning_model=reasoning_model,
+                            trace_in_user_turn=trace_in_user_turn,
                         )
 
                         for variant in perturbed_variants:

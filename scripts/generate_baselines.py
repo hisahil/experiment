@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from cot_segmentation import segment_cot, steps_to_baseline_cot  # noqa: E402
-from evaluator import extract_final_answer, is_correct  # noqa: E402
+from evaluator import extract_domain_answer, extract_final_answer, is_correct  # noqa: E402
 from llm_backend import create_backend  # noqa: E402
 
 DEFAULT_BASELINE_CONFIG = ROOT / "configs/baseline_generation.yaml"
@@ -107,6 +107,8 @@ def generate_baseline(
     min_steps: int,
     *,
     dry_run: bool = False,
+    domain: str = "math",
+    eval_type: str = "exact",
 ) -> tuple[str, list[str], str]:
     prompt = render_prompt(prompt_template, task=task["prompt"])
     result = backend.generate(
@@ -125,7 +127,10 @@ def generate_baseline(
         backend=backend,
         model_cfg=model_cfg,
     )
-    parsed = extract_final_answer(raw_text)
+    # Use domain-aware extraction so math \boxed{} answers are stripped of their
+    # wrapper (extract_final_answer would leave the \boxed{} intact, making
+    # is_correct fail for symbolic MATH-500 answers like \frac{3}{4}).
+    parsed = extract_domain_answer(raw_text, domain, eval_type)
     if parsed is None and dry_run:
         parsed = str(task["gold_answer"])
     baseline_cot = steps_to_baseline_cot(steps, parsed)
@@ -227,12 +232,15 @@ def main() -> None:
                         run_model_cfg,
                         min_steps,
                         dry_run=args.dry_run,
+                        domain=task.get("domain", "math"),
+                        eval_type=eval_type,
                     )
                 except Exception as exc:
                     print(f"  [ERROR] {key} attempt {attempt + 1}: {exc}")
                     last_record = {
                         "task_id": task["task_id"],
                         "domain": task.get("domain"),
+                        "eval_type": eval_type,
                         "model": model_name,
                         "baseline_cot": "",
                         "steps": [],
@@ -247,7 +255,13 @@ def main() -> None:
                     }
                     continue
 
-                parsed = extract_final_answer(baseline_cot)
+                # Re-extract from the formatted baseline_cot. After the domain-aware
+                # fix in generate_baseline(), baseline_cot ends with
+                # "Final answer: <clean_answer>" (no \boxed{} wrapper), so
+                # extract_domain_answer here is belt-and-suspenders correctness.
+                parsed = extract_domain_answer(baseline_cot, task.get("domain", "math"), eval_type)
+                if parsed is None:
+                    parsed = extract_final_answer(baseline_cot)
                 correct = is_correct(parsed, gold, eval_type)
                 step_count = len(steps)
                 verified = bool(correct) and step_count >= min_steps
@@ -255,6 +269,7 @@ def main() -> None:
                 last_record = {
                     "task_id": task["task_id"],
                     "domain": task.get("domain"),
+                    "eval_type": eval_type,
                     "model": model_name,
                     "baseline_cot": baseline_cot,
                     "steps": steps,

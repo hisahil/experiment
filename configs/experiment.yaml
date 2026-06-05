@@ -37,11 +37,21 @@ script3:
   output_file: data/perturbed_runs.jsonl
   variants: [stop, recovery]
   recovery_max_tokens: 8192
-  # DeepSeek-R1-Distill is a reasoning model: it emits <think>...</think> blocks.
-  # The baseline CoT prefix must be wrapped in <think> tags so the model treats
-  # it as a continuation of its own reasoning trace, not as user-supplied text.
-  # PILOT VALIDATION: compare raw_output with reasoning_model true vs false on 1 task
+  # The baseline prefix is placed as PLAIN VISIBLE TEXT in the assistant turn
+  # (NOT wrapped in <think> tags). DeepSeek-R1-Distill's chat template strips
+  # everything before </think> in history turns (content.split('</think>')[-1]),
+  # so think-wrapping would silently delete the baseline from the rendered prompt.
+  # DeepSeek also documents that historical reasoning is dropped from context on
+  # purpose; the template opens its own <think> block on the generation turn via
+  # add_generation_prompt — we leave think-handling entirely to the template.
+  # `reasoning_model` is kept for call-signature compatibility but no longer
+  # controls think-wrapping.
   reasoning_model: true
+  # trace_in_user_turn: false (default) uses the 3-turn assistant-turn mode.
+  # Set true to fold everything into a single user turn (sidesteps
+  # assistant-history handling; use as fallback if assistant-turn mode produces
+  # unexpected template behaviour).
+  trace_in_user_turn: false
   # vLLM batching (Approach A): prompts per vLLM call; set 1 for transformers/dry-run
   # After CUDA 12.8 fix (see run_perturbed.py docstring), set backend: vllm below and use 32+
   batch_size: 32

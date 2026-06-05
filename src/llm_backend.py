@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -52,6 +53,9 @@ def build_perturbed_messages(
     on the generation turn via add_generation_prompt, so we leave think-handling
     to it rather than injecting tags that the template would strip.
     """
+    # Strip any accidental <think>/<\/think> tags so the DeepSeek template's
+    # content.split('</think>')[-1] stripping cannot delete the prefix.
+    baseline_prefix = re.sub(r"</?think>", "", baseline_prefix)
     note = format_collaborating_note(injection_steps)
 
     # Folding everything into one user turn sidesteps assistant-history handling

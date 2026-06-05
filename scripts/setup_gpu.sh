@@ -15,11 +15,10 @@ else
   echo "WARNING: nvidia-smi not found. Are you on a GPU instance?"
 fi
 
-# ── Virtual environment ────────────────────────────────────────────────────────
-if [[ ! -d .venv ]]; then
-  echo "==> Creating virtual environment..."
-  python3 -m venv .venv
-fi
+# ── Virtual environment (always fresh to avoid mixed vllm/torch versions) ───────
+echo "==> Creating fresh virtual environment..."
+rm -rf .venv
+python3 -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
@@ -30,7 +29,7 @@ pip install --upgrade pip --quiet
 # Do NOT install latest torch+vllm from PyPI — vllm 0.22+ links libcudart.so.13
 # while torch cu128 ships libcudart.so.12, causing ImportError at runtime.
 echo "==> Installing PyTorch 2.5.1 (cu121)..."
-pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121 --quiet
+pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121 --quiet
 
 echo "==> Verifying CUDA..."
 python -c "
@@ -43,10 +42,10 @@ free, total = torch.cuda.mem_get_info(0)
 print(f'  VRAM  {free/1e9:.1f} GB free / {total/1e9:.1f} GB total')
 "
 
-# ── vLLM 0.6.6 (pinned; matches requirements.txt, cu121-compatible) ───────────
-echo "==> Installing vLLM 0.6.6..."
-pip uninstall vllm -y 2>/dev/null || true
+# ── vLLM 0.6.6 + pinned transformers (avoid ProcessorMixin / float8 conflicts) ─
+echo "==> Installing vLLM 0.6.6 + pinned deps..."
 pip install vllm==0.6.6 --quiet
+pip install "transformers>=4.44.0,<4.46" --quiet
 
 echo "==> Verifying vLLM import..."
 python -c "from vllm import LLM; print('  vLLM import OK')"
@@ -56,7 +55,6 @@ echo "==> Installing remaining dependencies..."
 pip install \
   pyyaml>=6.0 \
   python-dotenv>=1.0 \
-  transformers>=4.44.0 \
   accelerate>=0.33.0 \
   huggingface-hub>=0.24.0 \
   numpy>=1.26.0 \

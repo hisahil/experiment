@@ -26,9 +26,11 @@ source .venv/bin/activate
 echo "==> Upgrading pip..."
 pip install --upgrade pip --quiet
 
-# ── PyTorch cu128 (CUDA 12.8 wheel; runs on CUDA 12.8 and 13.0 drivers) ───────
-echo "==> Installing PyTorch (cu128)..."
-pip install torch --index-url https://download.pytorch.org/whl/cu128 --quiet
+# ── PyTorch cu121 (CUDA 12.1 wheel; compatible with driver 570 / CUDA 13.0) ───
+# Do NOT install latest torch+vllm from PyPI — vllm 0.22+ links libcudart.so.13
+# while torch cu128 ships libcudart.so.12, causing ImportError at runtime.
+echo "==> Installing PyTorch 2.5.1 (cu121)..."
+pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121 --quiet
 
 echo "==> Verifying CUDA..."
 python -c "
@@ -41,10 +43,13 @@ free, total = torch.cuda.mem_get_info(0)
 print(f'  VRAM  {free/1e9:.1f} GB free / {total/1e9:.1f} GB total')
 "
 
-# ── vLLM (reinstall after torch to pick up the right CUDA libs) ───────────────
-echo "==> Installing vLLM..."
+# ── vLLM 0.6.6 (pinned; matches requirements.txt, cu121-compatible) ───────────
+echo "==> Installing vLLM 0.6.6..."
 pip uninstall vllm -y 2>/dev/null || true
-pip install vllm --quiet
+pip install vllm==0.6.6 --quiet
+
+echo "==> Verifying vLLM import..."
+python -c "from vllm import LLM; print('  vLLM import OK')"
 
 # ── Remaining deps ─────────────────────────────────────────────────────────────
 echo "==> Installing remaining dependencies..."

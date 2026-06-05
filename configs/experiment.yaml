@@ -9,16 +9,14 @@ experiment:
   seed: 42
 
 # ──────────────────────────────────────────────────────────────────────
-# BACKEND NOTE: `backend` (below) and `script3.backend` are currently
-# set to `transformers` for local Mac CPU/MPS testing.  Once the
-# CUDA 12.8 fix is applied on the GPU node (see run_perturbed.py
-# docstring), switch BOTH to `vllm` for production throughput:
-#   model.backend: vllm
-#   script3.backend: vllm
+# BACKEND: set to `vllm` for GPU runs (A100 80GB, CUDA 12.8/13.0).
+# For local Mac CPU/MPS testing switch BOTH to `transformers`:
+#   model.backend: transformers
+#   script3.backend: transformers
 # ──────────────────────────────────────────────────────────────────────
 model:
   name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
-  backend: transformers          # → vllm after CUDA 12.8 fix on GPU
+  backend: vllm
   dtype: auto
   max_new_tokens: 2048
   temperature: 0.6
@@ -52,10 +50,10 @@ script3:
   # assistant-history handling; use as fallback if assistant-turn mode produces
   # unexpected template behaviour).
   trace_in_user_turn: false
-  # vLLM batching (Approach A): prompts per vLLM call; set 1 for transformers/dry-run
-  # After CUDA 12.8 fix (see run_perturbed.py docstring), set backend: vllm below and use 32+
+  # vLLM batching (Approach A): 32 prompts per vLLM call on A100.
+  # For local dry-run / transformers fallback set batch_size: 1.
   batch_size: 32
-  backend: transformers           # → vllm after CUDA 12.8 fix on GPU
+  backend: vllm
 
 paths:
   tasks: data/experiment_tasks.jsonl

@@ -22,12 +22,6 @@ data/mmlu/
 data/experiment_tasks*.jsonl
 data/baseline_cots*.jsonl
 data/injections_generated*.jsonl
-data/perturbed_runs*.jsonl
+data/post_injection_runs*.jsonl
 data/pilot_tasks.jsonl
-data/smoke_tasks.jsonl
-data/injections.json
-data/injection_templates.json
 
-# Experiment outputs (tracked placeholder only)
-results/*
-!results/.gitkeep

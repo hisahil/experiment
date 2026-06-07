@@ -1,0 +1,13 @@
+scope,comparison,n_pairs,mean_diff,t_stat,p_value,note
+overall,recovery_natural_vs_stop,117,0.4017,7.3885,0.0,
+overall,recovery_all_vs_stop,189,0.164,3.6459,0.000345,
+overall,clean_vs_stop,189,0.8042,27.7907,0.0,
+error_type=incorrect_reasoning,recovery_natural_vs_stop,37,0.4324,4.7411,3.3e-05,
+error_type=incorrect_reasoning,recovery_all_vs_stop,63,0.1587,2.0078,0.049029,
+error_type=incorrect_reasoning,clean_vs_stop,63,0.8413,18.1273,0.0,
+error_type=off_topic,recovery_natural_vs_stop,41,0.4634,4.9811,1.3e-05,
+error_type=off_topic,recovery_all_vs_stop,63,0.254,3.3889,0.001224,
+error_type=off_topic,clean_vs_stop,63,0.8889,22.2711,0.0,
+error_type=paraphrased_shift,recovery_natural_vs_stop,39,0.3077,3.1315,0.00334,
+error_type=paraphrased_shift,recovery_all_vs_stop,63,0.0794,1.0,0.321197,
+error_type=paraphrased_shift,clean_vs_stop,63,0.6825,11.5456,0.0,

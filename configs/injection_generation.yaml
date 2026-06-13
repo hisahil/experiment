@@ -1,4 +1,5 @@
 # Script 2 — LLM injection generation
+# Output JSONL field reference: scripts/generate_injections.py module docstring.
 # Method: the evaluated reasoning model first generates a verified baseline CoT;
 # Script 1 segments it into steps; Script 2 gives Agent B the prefix up to the
 # midpoint insertion step; Script 3 inserts Agent B's intervention and evaluates
@@ -8,10 +9,15 @@
 provider: anthropic
 model: claude-sonnet-4-6   # Claude Sonnet 4.6; override via --model if needed
 
-# Absolute verbosity per injected step (not relative to baseline CoT length)
+# Length per injected step — ABSOLUTE sentence counts (not % of baseline CoT).
+# Original proposal: ~10-20% (short) / ~60-70% (long) of baseline length. We use
+# fixed counts instead because Script 2 (Option A) does not see the full baseline
+# for relative sizing. Exact targets avoid uncontrolled variance (a "2-3" range
+# would mix 2- and 3-sentence injections without it being a designed factor).
+# Instruction = target granularity; max_tokens = hard cap per step.
 length_levels:
-  short: "2-3 sentences (one claim with brief justification)."
-  long: "5-7 sentences (claim with intermediate reasoning and verification)."
+  short: "Write exactly 3 sentences per step (one claim with brief justification)."
+  long: "Write exactly 7 sentences per step (claim with extended intermediate reasoning, verification, and elaboration)."
 
 k_values: [1, 3, 5]
 error_types:
@@ -19,16 +25,24 @@ error_types:
   - paraphrased_shift
   - off_topic
 
-# max_tokens per call (absolute verbosity, not relative to baseline CoT)
+# Hard cap per API call (~3×30-40 tok/sentence short; ~7×30-40 long; k=5 long ≈ 35 sentences total).
 max_tokens:
   short: 400
   long: 1200
 
+# Claude Sonnet only (not experiment models). 0.8 = enough diversity so injections
+# for the same error_type do not sound identical; low enough to stay coherent.
+# paraphrased_shift could use 0.7 in theory; 0.8 for all types is defensible.
 temperature: 0.8
 
 tasks: data/experiment_tasks.jsonl
 output: data/injections_generated.jsonl
 baseline_file: data/baseline_cots.jsonl
+
+# Experiment model(s) whose verified baselines Script 2 uses as injection context.
+# One injection set per model (trace-dependent design). Names match experiment.yaml model.name.
+target_models:
+  - deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
 
 # Main study placement is midpoint: floor(number_of_baseline_steps / 2).
 # If baselines are absent, Script 2 keeps a standalone fallback/dry-run prompt.

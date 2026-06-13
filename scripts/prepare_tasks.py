@@ -2,10 +2,34 @@
 """
 Build data/experiment_tasks.jsonl from benchmark datasets (Hugging Face).
 
+This is Stage 0 of the pipeline: it creates a fixed, reproducible TASK POOL.
+Scripts 1–4 do not run here. Runtime scopes (pilot_gpu, full) subsample this
+pool later via experiment_scope.select_tasks() in configs/experiment.yaml.
+
 Usage:
   pip install datasets
   python scripts/prepare_tasks.py --config configs/datasets.yaml
-  python scripts/prepare_tasks.py --config configs/datasets.yaml --output data/experiment_tasks_math500.jsonl
+  python scripts/prepare_tasks.py --config configs/datasets.yaml --output data/experiment_tasks_pilot_gpu.jsonl
+
+Selection methodology (per domain, seed from configs/datasets.yaml, default 42):
+  math    — MATH-500 test split; filter Level 4/5; random sample without
+            replacement (np.random.RandomState). No subtopic stratification.
+  science — SciBench; shuffle all rows; take first N with non-empty gold.
+  logic   — Knights-and-Knaves test files; balanced buckets over n_people
+            (see load_knights_knaves.build_kk_tasks). Optional (enabled flag).
+
+Note: logic bucket balance built here can be diluted when a scope caps
+max_per_domain below the pool size (see experiment_scope.select_tasks).
+
+Output JSONL schema (one JSON object per line):
+  task_id        — unique key across Scripts 1–4
+  domain         — math | science | logic; filtered by experiment_scope
+  prompt         — task text sent to the experiment model (Scripts 1–3)
+  gold_answer    — reference answer; Scripts 1/3/4 grade via is_correct()
+  eval_type      — grading rule: symbolic (math), numeric (SciBench), logic (K&K)
+  decoy_answer   — plausible wrong answer for Script 2 (Claude injections)
+  source_dataset — benchmark origin label (e.g. math500, scibench/atkins)
+  source_id      — id within the source dataset (traceability)
 """
 
 from __future__ import annotations
@@ -33,39 +57,35 @@ from math_utils import (  # noqa: E402
 from load_knights_knaves import build_kk_tasks  # noqa: E402
 
 
+# ---------------------------------------------------------------------------
+# I/O helpers
+# ---------------------------------------------------------------------------
+
+
 def load_yaml(path: Path) -> dict:
     with path.open(encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-def ensure_prompt_question(rows: list[dict]) -> list[dict]:
-    """
-    Guarantee every task carries BOTH `prompt` and `question` with identical
-    content (downstream readers accept either key). Applied to all domains and
-    fallback loaders so the contract holds for the whole pool.
-    """
-    for row in rows:
-        if "prompt" not in row and "question" in row:
-            row["prompt"] = row["question"]
-        row["question"] = row.get("prompt", "")
-    return rows
-
-
 def write_jsonl(path: Path, rows: list[dict]) -> None:
+    """Overwrite JSONL pool file (one compact JSON object per line)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def parse_gsm8k_answer(answer: str) -> str:
-    if "####" in answer:
-        return answer.split("####")[-1].strip().replace(",", "")
-    nums = re.findall(r"-?\d+\.?\d*", answer)
-    return nums[-1] if nums else answer.strip()
+# ---------------------------------------------------------------------------
+# Hugging Face dataset loading
+# ---------------------------------------------------------------------------
 
 
 def load_hf_dataset(ds_cfg: dict):
+    """
+    Load a Hugging Face split from domains.<name> in configs/datasets.yaml.
+
+    ds_cfg keys: hf_path, split, optional config (e.g. scibench default).
+    """
     from datasets import load_dataset
 
     path = ds_cfg["hf_path"]
@@ -76,61 +96,65 @@ def load_hf_dataset(ds_cfg: dict):
     return load_dataset(path, split=split)
 
 
-def sample_gsm8k(cfg: dict, rng: random.Random) -> list[dict]:
-    ds_cfg = cfg["domains"]["math_gsm8k"] if "math_gsm8k" in cfg["domains"] else cfg["domains"]["math"]
-    ds = load_hf_dataset(ds_cfg)
-    indices = list(range(len(ds)))
-    rng.shuffle(indices)
-    rows: list[dict] = []
-    for idx in indices[: ds_cfg["max_examples"]]:
-        row = ds[idx]
-        gold = parse_gsm8k_answer(row["answer"])
-        rows.append(
-            {
-                "task_id": f"gsm8k_{idx}",
-                "domain": "math",
-                "prompt": row["question"].strip(),
-                "gold_answer": gold,
-                "eval_type": "numeric",
-                "source_dataset": "gsm8k",
-                "source_id": str(idx),
-                "decoy_answer": numeric_decoy(gold, rng),
-            }
-        )
-    return rows
+# ---------------------------------------------------------------------------
+# Math domain — MATH-500 (symbolic grading)
+# ---------------------------------------------------------------------------
 
 
 def _math500_level_num(level: str) -> int | None:
+    """Parse 'Level 4' / 'Level 5' style labels to an integer difficulty level."""
     match = re.search(r"(\d+)", str(level))
     return int(match.group(1)) if match else None
 
 
 def sample_math500(cfg: dict, seed: int) -> list[dict]:
+    """
+    Build math-domain rows from HuggingFaceH4/MATH-500 (test split).
+
+    Steps:
+      1. Filter to configured levels (default 4 and 5 — harder problems only).
+      2. Assert the filtered pool is large enough for max_examples.
+      3. Drop rows with empty gold after parse_math500_gold (ungradable).
+      4. Draw max_examples indices without replacement (fixed seed).
+      5. Parse gold from answer/solution; attach math_decoy for Script 2.
+
+    Example (max_examples=80, levels=[4,5], seed=42):
+      ~312 Level-4/5 rows in pool → 80 chosen → task_id like math500_test_algebra_529.json
+    """
     ds_cfg = cfg["domains"]["math"]
     ds = load_hf_dataset(ds_cfg)
     levels = set(ds_cfg.get("levels", [4, 5]))
+
+    # Eligibility filter: deliberate difficulty cap, not random noise.
     filtered: list[dict] = []
     for row in ds:
         level_num = _math500_level_num(row.get("level", ""))
         if level_num in levels:
             filtered.append(row)
 
+    eligible: list[tuple[dict, str]] = []
+    for row in filtered:
+        gold = parse_math500_gold(str(row.get("answer", "")), str(row.get("solution", "")))
+        if not gold.strip():
+            continue
+        eligible.append((row, gold))
+
     max_examples = int(ds_cfg["max_examples"])
-    if len(filtered) < max_examples:
+    if len(eligible) < max_examples:
         raise ValueError(
-            f"MATH-500 level {sorted(levels)} pool has {len(filtered)} rows; "
+            f"MATH-500 level {sorted(levels)} pool has {len(eligible)} rows with non-empty gold; "
             f"need at least {max_examples}."
         )
 
+    # np RandomState for index draw; separate random.Random for decoy variation.
     rng = np.random.RandomState(seed)
-    chosen = rng.choice(len(filtered), size=max_examples, replace=False)
+    chosen = rng.choice(len(eligible), size=max_examples, replace=False)
 
     rows: list[dict] = []
     decoy_rng = random.Random(seed)
     for idx in chosen:
-        row = filtered[int(idx)]
+        row, gold = eligible[int(idx)]
         unique_id = str(row["unique_id"])
-        gold = parse_math500_gold(str(row.get("answer", "")), str(row.get("solution", "")))
         rows.append(
             {
                 "task_id": math500_task_id(unique_id),
@@ -147,11 +171,17 @@ def sample_math500(cfg: dict, seed: int) -> list[dict]:
 
 
 def sample_math(cfg: dict, rng: random.Random, seed: int) -> list[dict]:
+    """Dispatch math sampling; only math500 is configured today."""
     ds_cfg = cfg["domains"]["math"]
-    dataset = str(ds_cfg.get("dataset", "gsm8k")).lower()
-    if dataset == "math500":
-        return sample_math500(cfg, seed)
-    return sample_gsm8k(cfg, rng)
+    dataset = str(ds_cfg.get("dataset", "math500")).lower()
+    if dataset != "math500":
+        raise ValueError(f"Unsupported math dataset '{dataset}'; only math500 is configured.")
+    return sample_math500(cfg, seed)
+
+
+# ---------------------------------------------------------------------------
+# Science domain — SciBench (numeric grading)
+# ---------------------------------------------------------------------------
 
 
 def _clean_scibench_number(value: str) -> str:
@@ -160,10 +190,24 @@ def _clean_scibench_number(value: str) -> str:
 
 
 def sample_scibench(cfg: dict, rng: random.Random) -> list[dict]:
+    """
+    Build science-domain rows from xw27/scibench.
+
+    Steps:
+      1. Shuffle all dataset indices (rng from main(), same seed as config).
+      2. Walk shuffled order until max_examples rows with valid gold are collected.
+      3. Skip rows with empty answer_number (ungradable — not a sampling bias).
+      4. Append unit hint + fixed answer format to the prompt for parseable outputs.
+      5. numeric_decoy for Script 2 (slightly perturbed number).
+
+    Split is configured in datasets.yaml (currently train). Selection is uniform
+    random over eligible rows, not stratified by SciBench subject/source.
+    """
     ds_cfg = cfg["domains"]["science"]
     ds = load_hf_dataset(ds_cfg)
     indices = list(range(len(ds)))
     rng.shuffle(indices)
+
     rows: list[dict] = []
     for idx in indices:
         if len(rows) >= ds_cfg["max_examples"]:
@@ -194,104 +238,41 @@ def sample_scibench(cfg: dict, rng: random.Random) -> list[dict]:
     return rows
 
 
-def sample_mmlu(cfg: dict, rng: random.Random) -> list[dict]:
-    from datasets import load_dataset
-
-    ds_cfg = cfg["domains"]["science_mmlu"] if "science_mmlu" in cfg["domains"] else cfg["domains"]["science"]
-    subjects = ds_cfg["subjects"]
-    per_subject = max(1, ds_cfg["max_examples"] // len(subjects))
-    rows: list[dict] = []
-    for subject in subjects:
-        ds = load_dataset(ds_cfg["hf_path"], subject, split=ds_cfg["split"])
-        indices = list(range(len(ds)))
-        rng.shuffle(indices)
-        for idx in indices[:per_subject]:
-            row = ds[idx]
-            choices = row["choices"]
-            answer_idx = int(row["answer"])
-            gold = choices[answer_idx]
-            letters = "ABCD"
-            choice_lines = "\n".join(
-                f"{letters[i]}. {choices[i]}" for i in range(len(choices))
-            )
-            wrong_idx = (answer_idx + rng.randint(1, len(choices) - 1)) % len(choices)
-            rows.append(
-                {
-                    "task_id": f"mmlu_{subject}_{idx}",
-                    "domain": "science",
-                    "prompt": f"{row['question'].strip()}\n\n{choice_lines}\n\nReply with the letter only.",
-                    "gold_answer": letters[answer_idx],
-                    "eval_type": "exact",
-                    "source_dataset": f"mmlu/{subject}",
-                    "source_id": str(idx),
-                    "decoy_answer": letters[wrong_idx],
-                }
-            )
-    return rows[: ds_cfg["max_examples"]]
-
-
 def sample_science(cfg: dict, rng: random.Random) -> list[dict]:
+    """Dispatch science sampling; only scibench is configured today."""
     ds_cfg = cfg["domains"]["science"]
-    dataset = str(ds_cfg.get("dataset", "mmlu")).lower()
-    if dataset == "scibench":
-        return sample_scibench(cfg, rng)
-    return sample_mmlu(cfg, rng)
+    dataset = str(ds_cfg.get("dataset", "scibench")).lower()
+    if dataset != "scibench":
+        raise ValueError(f"Unsupported science dataset '{dataset}'; only scibench is configured.")
+    return sample_scibench(cfg, rng)
+
+
+# ---------------------------------------------------------------------------
+# Logic domain — Knights-and-Knaves (optional, exact logic grading)
+# ---------------------------------------------------------------------------
 
 
 def sample_logic(cfg: dict, rng: random.Random) -> list[dict]:
-    """Optional logic domain (Knights-and-Knaves). Returns [] when disabled."""
+    """
+    Optional logic domain (Knights-and-Knaves). Returns [] when disabled.
+
+    Delegates to build_kk_tasks() in load_knights_knaves.py, which:
+      - loads test JSONL files per n_people bucket (3, 4, 5 characters),
+      - draws an equal number of puzzles per bucket (balanced difficulty),
+      - sets eval_type=logic and a canonical gold/decoy role assignment.
+
+    Rows may include n_people for traceability; experiment_scope caps tasks
+    per domain without re-balancing buckets (pilot_gpu: 8 of 24).
+    """
     ds_cfg = cfg["domains"].get("logic")
     if not ds_cfg or not ds_cfg.get("enabled", False):
         return []
     return build_kk_tasks(ds_cfg, rng)
 
 
-def parse_mbpp_gold(test_list: list, rng: random.Random) -> tuple[str, str] | None:
-    if not test_list:
-        return None
-    test = test_list[0]
-    match = re.search(r"==\s*([^)\]]+)", test)
-    if not match:
-        return None
-    gold = match.group(1).strip().strip("'\"")
-    try:
-        v = int(gold)
-        decoy = str(v + rng.choice([1, 2, -1, 5]))
-    except ValueError:
-        decoy = gold + "_wrong"
-    return gold, decoy
-
-
-def sample_mbpp(cfg: dict, rng: random.Random) -> list[dict]:
-    ds_cfg = cfg["domains"]["code"]
-    ds = load_hf_dataset(ds_cfg)
-    indices = list(range(len(ds)))
-    rng.shuffle(indices)
-    rows: list[dict] = []
-    for idx in indices:
-        if len(rows) >= ds_cfg["max_examples"]:
-            break
-        row = ds[idx]
-        parsed = parse_mbpp_gold(row["test_list"], rng)
-        if parsed is None:
-            continue
-        gold, decoy = parsed
-        rows.append(
-            {
-                "task_id": f"mbpp_{row.get('task_id', idx)}",
-                "domain": "code",
-                "prompt": (
-                    f"{row['text'].strip()}\n\n"
-                    "Solve in Python. At the end write: Final answer: <value from the first test assertion>"
-                ),
-                "gold_answer": gold,
-                "eval_type": "exact",
-                "source_dataset": "mbpp",
-                "source_id": str(row.get("task_id", idx)),
-                "decoy_answer": decoy,
-            }
-        )
-    return rows
+# ---------------------------------------------------------------------------
+# CLI — concatenate domain pools and write JSONL
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
@@ -311,10 +292,10 @@ def main() -> None:
     out_path = args.output if args.output is not None else ROOT / cfg["output"]
 
     try:
+        # Stage 0 pool: math + science + logic (if enabled). Order is stable for logging.
         rows: list[dict] = []
         rows.extend(sample_math(cfg, rng, seed))
         rows.extend(sample_science(cfg, rng))
-        rows.extend(sample_mbpp(cfg, rng))
         rows.extend(sample_logic(cfg, rng))
     except ImportError:
         print("Install datasets: pip install datasets", file=sys.stderr)
@@ -323,7 +304,6 @@ def main() -> None:
         print(f"Dataset download failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    ensure_prompt_question(rows)
     write_jsonl(out_path, rows)
     by_domain: dict[str, int] = {}
     for row in rows:

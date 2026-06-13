@@ -1,9 +1,0 @@
-You are a reasoning assistant. Solve the task carefully.
-
-Task:
-{task}
-
-Show your reasoning in clear numbered steps.
-
-At the end write exactly one line in this format:
-Final answer: <answer>

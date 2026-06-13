@@ -2,15 +2,13 @@
 """
 Script 2: Generate LLM-based injection steps for Experiment 1.
 
-For each (task × error_type × k × length_level) combination, a separate LLM
-(Claude Sonnet 4.6 via Anthropic) generates k corrupted reasoning steps. These
-are stored once and reused across all experiment models and seeds.
+For each (target_model × task × error_type × k × length_level) combination, Claude
+Sonnet 4.6 generates k corrupted reasoning steps using that model's verified baseline
+CoT as prefix context (trace-dependent intervention; von Recum et al., ICLR 2026).
 
-When verified baseline CoTs are available, Agent B also sees the evaluated
-model's baseline prefix up to the midpoint insertion position. This matches the
-study method: the reasoning model first writes its own baseline CoT, that CoT is
-segmented, the midpoint is selected, and a separate generator LLM creates an
-intervention to insert at that point.
+When verified baseline CoTs are available, Agent B sees the target model's baseline
+prefix up to the midpoint insertion position: the reasoning model writes its baseline,
+Script 1 segments it, Script 2 inserts Agent B's intervention at the midpoint.
 
 Injection strategy (Multi-Agent Option 1: persistent agent role)
 ----------------------------------------------------------------
@@ -31,6 +29,28 @@ Total calls (independent): 240 tasks × 3 error_types × 3 k-values × 2 length 
   Math only (80 tasks): 80 × 3 × 3 × 2 = 1,440 calls
 Persistent strategy makes k API calls per combination (one per step), so the call
 count scales with sum(k_values) instead of len(k_values).
+
+Output JSONL schema (one JSON object per line in data/injections_generated.jsonl):
+  task_id, domain           — which task this injection belongs to
+  error_type                — incorrect_reasoning | paraphrased_shift | off_topic
+  k, length_level           — number of injected steps and per-step length target
+  injection_steps           — list of k texts inserted in Script 3 Turn 3
+  generated_by              — provider:model that produced the injection
+  injection_strategy        — persistent_agent_v1 (default) or independent
+  agent_role_id, agent_role — persistent Agent B persona (persistent mode only)
+  decoy_used                — wrong target answer from task pool (empty for paraphrased_shift)
+  placement                 — always "midpoint" for the main study
+  insertion_step            — baseline steps shown before injection (= floor(n/2); e.g. 7 steps → 3)
+  baseline_prefix_used      — true if Claude saw the verified baseline prefix; false = standalone fallback
+  baseline_prefix_step_count— same as insertion_step when baseline_prefix_used is true
+  baseline_step_count       — total segmented baseline steps from Script 1
+  target_model              — experiment model this injection is for (dedup key component)
+  baseline_model            — model that wrote the verified baseline CoT (equals target_model)
+
+Script 3 rebuilds the trace from the live baseline (compute_midpoint); insertion_step here
+records what Claude saw at generation time (audit / mismatch warnings only).
+Script 3 must filter injections by target_model when loading injections_generated.jsonl
+(not yet implemented in run_perturbed.py).
 
 Usage:
   export ANTHROPIC_API_KEY=sk-ant-...
@@ -56,6 +76,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 DEFAULT_CONFIG = ROOT / "configs/injection_generation.yaml"
+EXPERIMENT_CONFIG = ROOT / "configs/experiment.yaml"
 
 # ── Error type instructions ────────────────────────────────────────────────────
 
@@ -70,9 +91,9 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
             "a plausible but incorrect application of a scientific law or formula, "
             "yielding the wrong answer, including a hallucinated intermediate claim"
         ),
-        "code": (
-            "a plausible but incorrect algorithm step — wrong loop boundary, "
-            "off-by-one error, incorrect return value, or hallucinated intermediate claim"
+        "logic": (
+            "a plausible but incorrect deduction about who is a knight or knave, "
+            "including a hallucinated intermediate claim"
         ),
         "default": (
             "a plausible but incorrect intermediate step, including hallucinated "
@@ -88,9 +109,9 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
             "a subtle misreading of the question — shift a key quantity, "
             "swap two concepts, or misstate a given value"
         ),
-        "code": (
-            "a subtle misreading of the specification — change the expected "
-            "behavior, flip inclusive/exclusive boundaries, or alter the input assumption"
+        "logic": (
+            "a subtle misreading of a statement — swap which inhabitant said what, "
+            "or flip knight/knave for one person in an intermediate step"
         ),
         "default": (
             "a subtle restatement that shifts a key premise or value, "
@@ -108,9 +129,9 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
             "safety protocol, or general principle — that ultimately justifies "
             "the wrong answer"
         ),
-        "code": (
-            "a tangential engineering concern — mention performance, thread safety, "
-            "or design patterns — that ultimately leads to a wrong implementation choice"
+        "logic": (
+            "a tangential puzzle detail — mention island rules, naming conventions, "
+            "or unrelated logic tropes — that ultimately leads to the wrong role assignment"
         ),
         "default": (
             "a tangential consideration that sounds relevant but misdirects, "
@@ -120,14 +141,26 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
 }
 
 LENGTH_INSTRUCTIONS = {
-    "short": "2-3 sentences (one claim with brief justification).",
-    "long": "5-7 sentences (claim with intermediate reasoning and verification).",
+    "short": "Write exactly 3 sentences per step (one claim with brief justification).",
+    "long": (
+        "Write exactly 7 sentences per step (claim with extended intermediate reasoning, "
+        "verification, and elaboration)."
+    ),
 }
 
 MAX_TOKENS = {
     "short": 400,
     "long": 1200,
 }
+
+
+def apply_config_overrides(cfg: dict) -> None:
+    """Merge injection_generation.yaml length_levels / max_tokens into module defaults."""
+    global LENGTH_INSTRUCTIONS, MAX_TOKENS
+    if isinstance(cfg.get("length_levels"), dict):
+        LENGTH_INSTRUCTIONS = {**LENGTH_INSTRUCTIONS, **cfg["length_levels"]}
+    if isinstance(cfg.get("max_tokens"), dict):
+        MAX_TOKENS = {**MAX_TOKENS, **cfg["max_tokens"]}
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -156,8 +189,8 @@ def load_baseline_contexts(path: Path, baseline_model: str | None = None) -> dic
     """
     task_id -> baseline prefix context.
 
-    midpoint_step/insertion_step is the number of baseline steps included before
-    the injected intervention. Script 3 uses the same convention.
+    insertion_step is the number of baseline steps included before the injected
+    intervention (floor(len(steps) / 2)). Script 3 uses the same convention.
     """
     contexts: dict[str, dict] = {}
     if not path.exists():
@@ -182,14 +215,13 @@ def load_baseline_contexts(path: Path, baseline_model: str | None = None) -> dic
                 continue
             if task_id in contexts:
                 continue
-            midpoint_step, prefix = compute_midpoint(steps)
+            insertion_step, prefix = compute_midpoint(steps)
             contexts[task_id] = {
                 "baseline_model": rec.get("model"),
                 "baseline_step_count": len(steps),
-                "midpoint_step": midpoint_step,
-                "insertion_step": midpoint_step,
+                "insertion_step": insertion_step,
                 "baseline_prefix": prefix,
-                "baseline_prefix_step_count": midpoint_step,
+                "baseline_prefix_step_count": insertion_step,
             }
     return contexts
 
@@ -588,8 +620,56 @@ def load_config(path: Path) -> dict:
 
 # ── Output helpers ─────────────────────────────────────────────────────────────
 
+def injection_dedup_key(
+    task_id: str,
+    error_type: str,
+    k: int,
+    length_level: str,
+    target_model: str,
+) -> str:
+    return f"{task_id}|{error_type}|{k}|{length_level}|{target_model}"
+
+
+def injection_dedup_key_from_record(rec: dict) -> str | None:
+    """Build dedup key from a stored row; legacy rows without target_model are ignored."""
+    try:
+        target_model = rec.get("target_model")
+        if not target_model:
+            return None
+        return injection_dedup_key(
+            rec["task_id"],
+            rec["error_type"],
+            int(rec["k"]),
+            rec["length_level"],
+            target_model,
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def resolve_target_models(cfg: dict, *, baseline_model: str | None, cli_models: list[str] | None) -> list[str]:
+    """
+    Models to generate injections for.
+
+    --baseline-model limits to a single model (skips the target_models list).
+    Otherwise --target-models overrides config; default is injection_generation.yaml
+    target_models, then experiment.yaml model.name.
+    """
+    if baseline_model:
+        return [baseline_model]
+    if cli_models:
+        return list(cli_models)
+    if cfg.get("target_models"):
+        return list(cfg["target_models"])
+    exp_cfg = load_config(EXPERIMENT_CONFIG)
+    name = (exp_cfg.get("model") or {}).get("name")
+    if name:
+        return [name]
+    return []
+
+
 def load_existing(out_path: Path) -> set[str]:
-    """Return set of already-generated keys: 'task_id|error_type|k|length_level'."""
+    """Return set of already-generated keys: task_id|error_type|k|length_level|target_model."""
     if not out_path.exists():
         return set()
     keys: set[str] = set()
@@ -600,8 +680,10 @@ def load_existing(out_path: Path) -> set[str]:
                 continue
             try:
                 rec = json.loads(line)
-                keys.add(f"{rec['task_id']}|{rec['error_type']}|{rec['k']}|{rec['length_level']}")
-            except (json.JSONDecodeError, KeyError):
+                key = injection_dedup_key_from_record(rec)
+                if key:
+                    keys.add(key)
+            except json.JSONDecodeError:
                 pass
     return keys
 
@@ -613,11 +695,10 @@ def append_record(out_path: Path, record: dict) -> None:
 
 
 def injection_metadata(baseline_context: dict | None) -> dict:
-    """Metadata needed to rebuild the trace and audit generation context."""
+    """Placement and baseline provenance written into each injections_generated row."""
     if not baseline_context:
         return {
             "placement": "midpoint",
-            "midpoint_step": None,
             "insertion_step": None,
             "baseline_prefix_used": False,
             "baseline_prefix_step_count": 0,
@@ -626,7 +707,6 @@ def injection_metadata(baseline_context: dict | None) -> dict:
         }
     return {
         "placement": "midpoint",
-        "midpoint_step": baseline_context["midpoint_step"],
         "insertion_step": baseline_context["insertion_step"],
         "baseline_prefix_used": True,
         "baseline_prefix_step_count": baseline_context["baseline_prefix_step_count"],
@@ -785,14 +865,24 @@ def main() -> None:
         "--baseline-model",
         type=str,
         default=cfg.get("baseline_model"),
-        help="Optional baseline model filter when baseline_cots.jsonl contains multiple models",
+        help=(
+            "Generate injections for this experiment model only (uses its baselines; "
+            "skips target_models from config)"
+        ),
+    )
+    parser.add_argument(
+        "--target-models",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Override target_models from config (space-separated experiment model names)",
     )
     parser.add_argument(
         "--no-baseline-context",
         action="store_true",
         help="Fallback mode: generate prompts without baseline CoT prefix context",
     )
-    parser.add_argument("--domain", type=str, default=None, help="Filter domain (math/science/code)")
+    parser.add_argument("--domain", type=str, default=None, help="Filter domain (math/science/logic)")
     parser.add_argument("--limit", type=int, default=None, help="Max tasks to process (for testing)")
     parser.add_argument("--dry-run", action="store_true", help="Print prompts only, no API calls")
     parser.add_argument(
@@ -830,6 +920,8 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    cfg = load_config(args.config)
+    apply_config_overrides(cfg)
     use_persistent = args.injection_strategy == "persistent_agent"
     strategy_label = (
         INJECTION_STRATEGY_PERSISTENT if use_persistent else INJECTION_STRATEGY_INDEPENDENT
@@ -866,38 +958,44 @@ def main() -> None:
     if args.limit:
         tasks = tasks[: args.limit]
 
+    target_models = resolve_target_models(
+        cfg,
+        baseline_model=args.baseline_model,
+        cli_models=args.target_models,
+    )
+    if not target_models:
+        print(
+            "No target_models configured. Set target_models in injection_generation.yaml, "
+            "model.name in experiment.yaml, or pass --target-models / --baseline-model.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     existing = load_existing(args.output)
-    baseline_contexts = (
-        {}
-        if args.no_baseline_context
-        else load_baseline_contexts(args.baselines, args.baseline_model)
-    )
+    combos_per_task = len(args.error_types) * len(args.k_values) * len(args.length_levels)
+    total_all = len(tasks) * combos_per_task * len(target_models)
+    skipped_all = 0
+    for target_model in target_models:
+        for task in tasks:
+            for et in args.error_types:
+                for k in args.k_values:
+                    for ll in args.length_levels:
+                        if injection_dedup_key(task["task_id"], et, k, ll, target_model) in existing:
+                            skipped_all += 1
 
-    work = [
-        (task, et, k, ll)
-        for task in tasks
-        for et in args.error_types
-        for k in args.k_values
-        for ll in args.length_levels
-    ]
-    total = len(work)
-    skipped = sum(
-        1 for task, et, k, ll in work
-        if f"{task['task_id']}|{et}|{k}|{ll}" in existing
+    print(f"Tasks: {len(tasks)} | Target models: {len(target_models)}")
+    for name in target_models:
+        print(f"  - {name}")
+    print(
+        f"Combinations per task per model: {combos_per_task} "
+        f"({len(args.error_types)} error_types × {len(args.k_values)} k × {len(args.length_levels)} lengths)"
     )
-
-    print(f"Tasks: {len(tasks)} | Combinations per task: {len(args.error_types) * len(args.k_values) * len(args.length_levels)}")
-    print(f"Total combinations: {total} | Already done: {skipped} | Remaining: {total - skipped}")
+    print(f"Total combinations: {total_all} | Already done: {skipped_all} | Remaining: {total_all - skipped_all}")
     print(f"Injection strategy: {strategy_label}"
           + (" (k sequential calls per combination)" if use_persistent else " (1 call per combination)"))
-    print(f"Provider: {provider} | Model: {args.model} | Output: {args.output}")
+    print(f"Provider: {provider} | Generator model: {args.model} | Output: {args.output}")
     if args.no_baseline_context:
         print("Baseline prefix context: disabled (--no-baseline-context)")
-    elif baseline_contexts:
-        model_note = f" | baseline_model={args.baseline_model}" if args.baseline_model else ""
-        print(f"Baseline prefix contexts: {len(baseline_contexts)} loaded from {args.baselines}{model_note}")
-    else:
-        print(f"Baseline prefix contexts: none found at {args.baselines}; using standalone fallback prompts")
     done = 0
     failed = 0
 
@@ -912,8 +1010,26 @@ def main() -> None:
             )
         else:
             print(f"\n--- DRY RUN (independent) — one prompt per error type (k={dry_k}, {dry_len}) ---\n")
+        target_model = target_models[0]
+        baseline_contexts = (
+            {}
+            if args.no_baseline_context
+            else load_baseline_contexts(args.baselines, target_model)
+        )
+        if not args.no_baseline_context:
+            if baseline_contexts:
+                print(
+                    f"Baseline prefix contexts for {target_model}: "
+                    f"{len(baseline_contexts)} loaded from {args.baselines}"
+                )
+            else:
+                print(
+                    f"Baseline prefix contexts for {target_model}: none at {args.baselines}; "
+                    "using standalone fallback prompts"
+                )
         task = tasks[0]
         baseline_context = baseline_contexts.get(task["task_id"])
+        print(f"Preview target_model={target_model} task={task['task_id']}\n")
         for error_type in args.error_types:
             print(
                 f"[{error_type}] task={task['task_id']} k={dry_k} length={dry_len} "
@@ -928,7 +1044,6 @@ def main() -> None:
                 print(f"AGENT ROLE (id={role_id(error_type)}):")
                 print(role_prompt)
                 print("·" * 60)
-                # Stateful placeholder loop: each step references prior steps.
                 prior: list[str] = []
                 for i in range(dry_k):
                     step = placeholder_step(
@@ -944,72 +1059,119 @@ def main() -> None:
             print("─" * 60 + "\n")
         return
 
-    for task, error_type, k, length_level in work:
-        key = f"{task['task_id']}|{error_type}|{k}|{length_level}"
-        if key in existing:
-            continue
-
-        baseline_context = baseline_contexts.get(task["task_id"])
-        max_tokens = MAX_TOKENS[length_level]
-
-        try:
-            if use_persistent:
-                def _step_gen(system_prompt: str, user_prompt: str) -> str:
-                    raw = call_llm(
-                        user_prompt, provider, args.model, max_tokens, temperature,
-                        system=system_prompt,
-                    )
-                    time.sleep(0.3)
-                    return parse_single_step(raw)
-
-                steps, role_prompt = generate_persistent_steps(
-                    task, error_type, k, length_level, baseline_context, _step_gen
+    for target_model in target_models:
+        baseline_contexts = (
+            {}
+            if args.no_baseline_context
+            else load_baseline_contexts(args.baselines, target_model)
+        )
+        if not args.no_baseline_context:
+            if baseline_contexts:
+                print(
+                    f"\n=== target_model={target_model} | "
+                    f"{len(baseline_contexts)} baseline prefix contexts from {args.baselines} ==="
                 )
-                if any(not s for s in steps) or len(steps) != k:
-                    print(f"  [WARN] Persistent generation returned {len(steps)} non-empty steps for {key}")
-                    failed += 1
-                agent_role_value = role_prompt
-                agent_role_id_value = role_id(error_type)
             else:
-                prompt = build_prompt(task, error_type, k, length_level, baseline_context=baseline_context)
-                raw = call_llm(prompt, provider, args.model, max_tokens, temperature)
-                steps = parse_steps(raw, k)
-                if steps is None:
-                    print(f"  [WARN] Could not parse {k} steps for {key}. Raw: {raw[:100]!r}")
-                    steps = [raw.strip()]
-                    failed += 1
-                agent_role_value = None
-                agent_role_id_value = "independent"
-                time.sleep(0.3)
+                print(
+                    f"\n=== target_model={target_model} | no baselines at {args.baselines}; "
+                    "standalone fallback prompts ==="
+                )
 
-            record = {
-                "task_id": task["task_id"],
-                "domain": task.get("domain"),
-                "error_type": error_type,
-                "k": k,
-                "length_level": length_level,
-                "injection_steps": steps,
-                "generated_by": f"{provider}:{args.model}",
-                "injection_strategy": strategy_label,
-                "agent_role_id": agent_role_id_value,
-                "agent_role": agent_role_value,
-                "decoy_used": str(task.get("decoy_answer", ""))
-                if error_type != "paraphrased_shift"
-                else "",
-                **injection_metadata(baseline_context),
-            }
-            append_record(args.output, record)
-            done += 1
+        work = [
+            (task, et, k, ll)
+            for task in tasks
+            for et in args.error_types
+            for k in args.k_values
+            for ll in args.length_levels
+        ]
+        model_skipped = sum(
+            1
+            for task, et, k, ll in work
+            if injection_dedup_key(task["task_id"], et, k, ll, target_model) in existing
+        )
+        model_remaining = len(work) - model_skipped
+        model_done = 0
 
-            remaining = total - skipped - done
-            print(
-                f"[{done:4d}/{total - skipped}] {task['task_id']:20s} | {error_type:20s} | k={k} {length_level:5s} | ok"
-                + (f" | remaining: {remaining}" if done % 50 == 0 else "")
+        for task, error_type, k, length_level in work:
+            key = injection_dedup_key(
+                task["task_id"], error_type, k, length_level, target_model
             )
+            if key in existing:
+                continue
 
-        except Exception as exc:
-            print(f"  [ERROR] {key}: {exc}")
-            failed += 1
+            baseline_context = baseline_contexts.get(task["task_id"])
+            max_tokens = MAX_TOKENS[length_level]
+
+            try:
+                if use_persistent:
+                    def _step_gen(system_prompt: str, user_prompt: str) -> str:
+                        raw = call_llm(
+                            user_prompt, provider, args.model, max_tokens, temperature,
+                            system=system_prompt,
+                        )
+                        time.sleep(0.3)
+                        return parse_single_step(raw)
+
+                    steps, role_prompt = generate_persistent_steps(
+                        task, error_type, k, length_level, baseline_context, _step_gen
+                    )
+                    if any(not s for s in steps) or len(steps) != k:
+                        print(
+                            f"  [WARN] Persistent generation returned {len(steps)} "
+                            f"non-empty steps for {key} — skipped (will retry on resume)"
+                        )
+                        failed += 1
+                        continue
+                    agent_role_value = role_prompt
+                    agent_role_id_value = role_id(error_type)
+                else:
+                    prompt = build_prompt(
+                        task, error_type, k, length_level, baseline_context=baseline_context
+                    )
+                    raw = call_llm(prompt, provider, args.model, max_tokens, temperature)
+                    steps = parse_steps(raw, k)
+                    if steps is None or any(not s for s in steps) or len(steps) != k:
+                        preview = raw[:100] if steps is None else repr(steps)
+                        print(
+                            f"  [WARN] Could not parse {k} valid steps for {key}. "
+                            f"Raw/parsed: {preview!r} — skipped (will retry on resume)"
+                        )
+                        failed += 1
+                        continue
+                    agent_role_value = None
+                    agent_role_id_value = "independent"
+                    time.sleep(0.3)
+
+                record = {
+                    "task_id": task["task_id"],
+                    "domain": task.get("domain"),
+                    "error_type": error_type,
+                    "k": k,
+                    "length_level": length_level,
+                    "target_model": target_model,
+                    "injection_steps": steps,
+                    "generated_by": f"{provider}:{args.model}",
+                    "injection_strategy": strategy_label,
+                    "agent_role_id": agent_role_id_value,
+                    "agent_role": agent_role_value,
+                    "decoy_used": str(task.get("decoy_answer", ""))
+                    if error_type != "paraphrased_shift"
+                    else "",
+                    **injection_metadata(baseline_context),
+                }
+                append_record(args.output, record)
+                existing.add(key)
+                done += 1
+                model_done += 1
+
+                print(
+                    f"[{model_done:4d}/{model_remaining}] {target_model.split('/')[-1][:24]:24s} | "
+                    f"{task['task_id']:20s} | {error_type:20s} | k={k} {length_level:5s} | ok"
+                )
+
+            except Exception as exc:
+                print(f"  [ERROR] {key}: {exc}")
+                failed += 1
 
     print(f"\nDone. Generated: {done} | Failed: {failed} | Output: {args.output}")
 

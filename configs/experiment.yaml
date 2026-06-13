@@ -1,8 +1,8 @@
-# Experiment 1 — full pipeline (scope limits control pilot vs full run)
+# Experiment 1 — Scripts 1–4 pipeline (scope limits control pilot vs full run)
 #
-# Pilot:  python src/run_experiment.py --config configs/experiment.yaml
-# Dry-run: python src/run_experiment.py --config configs/experiment.yaml --dry-run
-# Full:   set active_scope: full (or --scope full)
+# GPU pilot:  python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu
+# Full:       set active_scope: full (or --scope full), then Scripts 1–4 in order
+# Dry-run:    add --dry-run to any script; use --limit N for small local checks
 
 experiment:
   name: exp1_perturbed_cot
@@ -30,16 +30,30 @@ model:
 # Baseline CoT generation (Script 1)
 baseline:
   generated_file: data/baseline_cots.jsonl
-  max_retries: 5
+  # Majority-vote solvability filter (von Recum et al., ICLR 2026, use N=8).
+  # Per task: draw a FIXED verification_samples runs (temperature unchanged); a run's vote
+  # counts ONLY answer correctness. verified = (#correct >= ceil(verification_samples / 2)).
+  # Baseline written = correct run with most steps; if its step_count < min_steps →
+  # exclude_reason: insufficient_steps. Majority not reached → exclude_reason: below_majority.
+  # verified=false rows are skipped by Script 3 (reason in baseline_cots.jsonl).
+  verification_samples: 5
+  max_retries: 5  # legacy fallback for verification_samples
   min_steps: 3
 
 # Perturbed CoT runs (Script 3) — python scripts/run_perturbed.py
 script3:
   baseline_file: data/baseline_cots.jsonl
   injections_file: data/injections_generated.jsonl
-  output_file: data/perturbed_runs.jsonl
+  # Experiment-model runs after Claude injection (stop/recovery outputs only, not the dialog).
+  # Inputs to build that dialog: baseline_file + injections_file. Schema: run_perturbed.py docstring.
+  output_file: data/post_injection_runs.jsonl
   variants: [stop, recovery]
   recovery_max_tokens: 8192
+  # Stop = rapid-response regime: genug fuer kurze Antwort, zu wenig fuer
+  # volle Neuberechnung. Recovery bleibt unconstrained (recovery_max_tokens).
+  # REI = (acc_recovery - acc_stop) / (tokens_recovery - tokens_stop) wird
+  # damit sauber interpretierbar.
+  stop_max_new_tokens: 100
   # The baseline prefix is placed as PLAIN VISIBLE TEXT in the assistant turn
   # (NOT wrapped in <think> tags). DeepSeek-R1-Distill's chat template strips
   # everything before </think> in history turns (content.split('</think>')[-1]),
@@ -50,25 +64,20 @@ script3:
   # `reasoning_model` is kept for call-signature compatibility but no longer
   # controls think-wrapping.
   reasoning_model: true
-  # trace_in_user_turn: false (default) uses the 3-turn assistant-turn mode.
-  # Set true to fold everything into a single user turn (sidesteps
-  # assistant-history handling; use as fallback if assistant-turn mode produces
-  # unexpected template behaviour).
+  # trace_in_user_turn: false — experiment design (Script 3, build_perturbed_messages).
+  # 3 input turns: (1) user=task, (2) assistant=baseline prefix to midpoint,
+  # (3) user="[Note from collaborating agent]:" + all k injection steps in one message.
+  # k changes Turn 3 length only, not turn count. true = single-user-turn debug fallback only.
   trace_in_user_turn: false
   # vLLM batching (Approach A): 32 prompts per vLLM call on A100.
   # For local dry-run / transformers fallback set batch_size: 1.
   batch_size: 32
   backend: vllm
 
+# Shared file paths (Scripts 1–3 read tasks/injections; scopes may override tasks).
 paths:
   tasks: data/experiment_tasks.jsonl
   injections: data/injections_generated.jsonl
-  prompts:
-    baseline: prompts/baseline.txt
-    recovery: prompts/corrupted_external_cot.txt
-    stop: prompts/stop_after_corruption.txt
-  outputs: outputs
-  logs: logs
 
 # Injection generation (Script 2)
 injection:
@@ -91,7 +100,7 @@ design:
     - off_topic
   k_injections: [1, 3, 5]
   length_levels: [short, long]
-  seeds: [42, 43, 44]
+  seeds: [42, 43, 44, 45, 46]
 
 # Supplementary position analysis (separate run on subset)
 supplementary_positions:
@@ -106,14 +115,11 @@ supplementary_positions:
 active_scope: pilot
 
 scopes:
-  smoke:
-    # Use configs/smoke_config.yaml + run_experiment.py --legacy-smoke instead
-    description: "3 tasks, infra only"
   pilot:
     description: "Feasibility: 50 tasks, 1 seed, k=1, short traces"
     max_tasks_total: 50
     max_per_domain: null
-    domains: [math, science, code]
+    domains: [math, science, logic]
     variants: [baseline, stop, recovery]
     error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
     k_injections: [1]
@@ -123,23 +129,23 @@ scopes:
     description: "Thesis Exp 1 target (per domain cap; adjust to proposal)"
     max_tasks_total: null
     max_per_domain: 80
-    domains: [math, science, code]
+    domains: [math, science, logic]
     variants: [baseline, stop, recovery]
     error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
     k_injections: [1, 3, 5]
     length_levels: [short, long]
-    seeds: [42, 43, 44]
+    seeds: [42, 43, 44, 45, 46]
   # GPU pilot — reduced design on the MATH-500 + SciBench (+ optional K&K) pool.
-  # Build that pool (does NOT touch data/experiment_tasks.jsonl):
+  # Build pilot pool (math + science + logic; does NOT touch data/experiment_tasks.jsonl):
   #   python scripts/prepare_tasks.py --config configs/datasets.yaml \
-  #     --output data/experiment_tasks_math500.jsonl
+  #     --output data/experiment_tasks_pilot_gpu.jsonl
   # Run:
   #   python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu
   #   python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu_techcheck
   #   python scripts/evaluate.py
   pilot_gpu:
     description: "GPU pilot: math20/science8/logic8, 3 error types, k{1,3} short, 1 seed, stop+recovery"
-    tasks: data/experiment_tasks_math500.jsonl   # per-scope override (run_perturbed)
+    tasks: data/experiment_tasks_pilot_gpu.jsonl   # per-scope override (run_perturbed)
     max_tasks_total: null
     # Per-domain caps (dict form, handled by experiment_scope.select_tasks).
     max_per_domain:
@@ -157,10 +163,10 @@ scopes:
     # FULL cross product, so a single extra (k=5, long) cell cannot be expressed
     # inside this block without also generating k=1/3 long and k=5 short. It is
     # therefore encoded as the sibling scope `pilot_gpu_techcheck` below, run as a
-    # second pass; its rows append to the same perturbed_runs.jsonl.
+    # second pass; its rows append to the same post_injection_runs.jsonl.
   pilot_gpu_techcheck:
     description: "GPU pilot technical check: the single k=5 + long combo (same tasks/domains as pilot_gpu)"
-    tasks: data/experiment_tasks_math500.jsonl
+    tasks: data/experiment_tasks_pilot_gpu.jsonl
     max_tasks_total: null
     max_per_domain:
       math: 20
@@ -175,14 +181,25 @@ scopes:
 
 # Evaluation + REI analysis (Script 4 — python scripts/evaluate.py)
 script4:
-  input_path: data/perturbed_runs.jsonl       # Script 3 output (variant: stop|recovery)
+  input_path: data/post_injection_runs.jsonl    # Script 3 output (variant: stop|recovery)
   baseline_path: data/baseline_cots.jsonl      # Script 1 output (clean accuracy source)
   output_dir: results
-  ci_z: 1.96                                    # normal-approx CI half-width multiplier
-  min_recovery_seeds: 2                         # min natural-recovery seeds per task-condition
-  min_denominator_tokens: 10                    # min (tokens_recovery - tokens_stop) for valid REI
-  min_valid_tasks: 60                           # warn if a condition has fewer valid-REI tasks
-  # Difficulty from clean accuracy: easy if >= easy; hard if <= hard; else medium.
+  # ci_z — 95% CI half-width per condition: ci_z * (std / sqrt(n_tasks)). Reporting only.
+  ci_z: 1.96
+  # min_recovery_seeds — per task-condition, count recovery runs with
+  # recovery_terminated_by == "natural". Condition reports n_tasks with count >= N.
+  # Descriptive only (no filter). With 1 seed (pilot_gpu) max is 1, so threshold 2 is for full (3 seeds).
+  min_recovery_seeds: 2
+  # min_denominator_tokens — per task, REI = (acc_recovery - acc_stop) / (tokens_recovery - tokens_stop).
+  # If token delta < this, rei_* = null. At 1: only delta <= 0 excluded (no division by zero);
+  # small positive deltas (efficient recovery near stop cap) are kept.
+  min_denominator_tokens: 1
+  # min_valid_tasks — per condition (e.g. math x error_type x k x length), warn if fewer than N tasks
+  # have non-null rei_natural. Does not drop rows. Pilot has ~6-13 tasks/condition, so warnings are expected.
+  min_valid_tasks: 60
+  # difficulty_bins — per-task label from Script 1 clean accuracy (baseline_cots); descriptive only.
+  # easy: model solves cleanly >= 70% of the time; hard: <= 40%; medium: between; unknown: no baseline.
+  # Used to slice results (e.g. recovery rate by difficulty), not to filter runs.
   difficulty_bins:
     easy: 0.70
     hard: 0.40

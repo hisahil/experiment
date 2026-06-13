@@ -13,7 +13,7 @@ Usage:
   python scripts/select_pilot_tasks.py \
     --config configs/experiment.yaml \
     --scope pilot_gpu \
-    --tasks data/experiment_tasks_math500.jsonl \
+    --tasks data/experiment_tasks_pilot_gpu.jsonl \
     --output data/pilot_gpu_tasks.jsonl
 """
 
@@ -59,7 +59,7 @@ def main() -> None:
     scope = get_scope(cfg, args.scope)
     experiment_seed = int(cfg.get("experiment", {}).get("seed", 42))
 
-    tasks_path = args.tasks or (ROOT / scope.get("tasks", "data/experiment_tasks_math500.jsonl"))
+    tasks_path = args.tasks or (ROOT / scope.get("tasks", "data/experiment_tasks_pilot_gpu.jsonl"))
     if not tasks_path.exists():
         print(f"Missing task pool: {tasks_path}", file=sys.stderr)
         sys.exit(1)

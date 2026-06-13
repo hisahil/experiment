@@ -1,10 +1,20 @@
-"""Math answer extraction and decoy helpers for MATH-500 / GSM8K task prep."""
+"""
+Math answer extraction and decoy helpers for MATH-500 task prep and evaluation.
+
+Used by:
+  prepare_tasks.py  — gold_answer, task_id, decoy_answer for math-domain rows
+  evaluator.py      — extract_boxed() when parsing model outputs
+
+Decoys are deterministic: callers pass random.Random(seed) so the same task always
+gets the same wrong answer across re-runs (Script 2 injection target).
+"""
 
 from __future__ import annotations
 
 import random
 import re
 
+# Nested braces allowed (e.g. \boxed{\frac{1}{2}}).
 BOXED_ANSWER_RE = re.compile(r"\\boxed\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}")
 
 
@@ -13,11 +23,18 @@ def extract_boxed(text: str) -> str | None:
     matches = BOXED_ANSWER_RE.findall(text)
     if not matches:
         return None
+    # Last \boxed{} is the final answer; earlier ones are often intermediate steps.
     return matches[-1].strip()
 
 
 def parse_math500_gold(answer: str, solution: str | None = None) -> str:
-    """Prefer the dataset answer; fall back to the last \\boxed{} in the solution."""
+    """
+    Reference answer for a MATH-500 row.
+
+    Prefer the short dataset ``answer`` field; if empty, take the last \\boxed{}
+    from the long ``solution`` write-up. Returns "" when neither yields a value
+    (prepare_tasks.py skips such rows).
+    """
     gold = (answer or "").strip()
     if gold:
         return gold
@@ -29,14 +46,22 @@ def parse_math500_gold(answer: str, solution: str | None = None) -> str:
 
 
 def _sanitize_unique_id(unique_id: str) -> str:
+    """Make a dataset path safe for task_id (only alnum, dot, underscore, hyphen)."""
     return re.sub(r"[^a-zA-Z0-9._-]+", "_", unique_id.strip()).strip("_")
 
 
 def math500_task_id(unique_id: str) -> str:
+    """Internal task key, e.g. test/algebra/529.json -> math500_test_algebra_529.json."""
     return f"math500_{_sanitize_unique_id(unique_id)}"
 
 
 def numeric_decoy(gold: str, rng: random.Random) -> str:
+    """
+    Simple wrong answer for pure numeric gold (SciBench; also used inside math_decoy).
+
+    Integers: add a small offset (3, 7, -2, 10, -5). Decimals: multiply by 1.15.
+    Non-numeric input falls back to "0".
+    """
     try:
         v = float(gold.replace(",", ""))
         if v == int(v):
@@ -48,17 +73,21 @@ def numeric_decoy(gold: str, rng: random.Random) -> str:
 
 def math_decoy(gold: str, rng: random.Random) -> str:
     """
-    Build a plausible wrong answer for math tasks.
+    Plausible wrong answer for MATH-500 (symbolic gold shapes).
 
-    Handles plain numbers, tuples, simple fractions, pi expressions, and text.
+    Rule-based perturbation per answer type — not random garbage, so Script 2
+    (incorrect_reasoning / off_topic) can steer toward a believable mistake.
+    Branches are tried in order; first match wins. Fallback appends +1/+2/+3.
     """
     text = gold.strip()
     if not text:
         return "0"
 
+    # Plain scalar: delegate to numeric_decoy (e.g. gold "42" -> "49").
     if re.fullmatch(r"-?\d+\.?\d*", text.replace(",", "")):
         return numeric_decoy(text, rng)
 
+    # Tuple (a, b, ...): perturb one component only.
     if text.startswith("(") and text.endswith(")"):
         parts = [p.strip() for p in text[1:-1].split(",")]
         if len(parts) >= 2:
@@ -74,6 +103,7 @@ def math_decoy(gold: str, rng: random.Random) -> str:
                 parts[idx] = f"{part}_wrong"
             return "(" + ", ".join(parts) + ")"
 
+    # Simple a/b fraction (not LaTeX): bump numerator or denominator.
     frac = re.fullmatch(r"(\d+)/(\d+)", text)
     if frac:
         num, den = int(frac.group(1)), int(frac.group(2))
@@ -81,20 +111,25 @@ def math_decoy(gold: str, rng: random.Random) -> str:
             return f"{num + rng.choice([1, 2, 3])}/{den}"
         return f"{num}/{den + rng.choice([1, 2, 3])}"
 
+    # Pi expressions: flip sign or add a small offset.
     if r"\pi" in text or re.search(r"(?<![a-zA-Z])pi(?![a-zA-Z])", text, re.IGNORECASE):
         offset = rng.choice([1, 2, 3, 4])
         if text.startswith("-"):
             return text[1:] or str(offset)
         return f"-({text})" if rng.random() < 0.5 else f"{text}+{offset}"
 
+    # Complex numbers (a+bi): tweak sign or append +1.
     if re.search(r"(?<=\d)i\b", text) or re.search(r"\+\s*\d*i\b", text):
         return text.replace("i", "i").replace("+", "-+", 1) if "+" in text else f"{text}+1"
 
+    # LaTeX text answers: generic wrong label.
     text_match = re.fullmatch(r"\\text\{([^}]+)\}", text)
     if text_match:
         return r"\text{Other}"
 
+    # Second numeric check (defensive; unreachable for well-formed gold today).
     if re.fullmatch(r"-?\d+\.?\d*", text.replace(",", "")):
         return numeric_decoy(text, rng)
 
+    # Equations, intervals, \frac{...}, etc.: append a small term.
     return f"{text}+{rng.choice([1, 2, 3])}"

@@ -1,11 +1,23 @@
 # Script 1 — verified baseline CoT generation
+# Prompt: prompts/baseline_generation.txt — numbered Step N: CoT + Final answer: (see generate_baselines.py docstring).
 
 tasks: data/experiment_tasks.jsonl
 output: data/baseline_cots.jsonl
 prompt: prompts/baseline_generation.txt
 
+# Majority-vote solvability filter (von Recum et al., ICLR 2026, use N=8).
+# Per task we draw a FIXED verification_samples runs (seeds base_seed+0..N-1, temperature from
+# experiment.yaml — no early stop). A run's vote counts ONLY answer correctness.
+# verified = (#correct >= ceil(verification_samples / 2)), i.e. majority (3 of 5 by default).
+# Baseline written = the correct run with the MOST steps.
+#   - majority reached but best correct run has < min_steps → exclude_reason: insufficient_steps
+#   - majority not reached                                  → exclude_reason: below_majority
+# Excluded rows: baseline_cots.jsonl verified=false; Script 3 logs [SKIP] with exclude_reason.
+verification_samples: 5
+# max_retries: legacy fallback for verification_samples if the latter is absent.
 max_retries: 5
 min_steps: 3
 
-# null => use model.name from experiment.yaml
+# models: null -> single model from experiment.yaml (DeepSeek-R1-Distill-Qwen-32B).
+# Or list multiple HF model ids to generate one baseline per model.
 models: null

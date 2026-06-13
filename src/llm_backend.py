@@ -20,6 +20,23 @@ class GenerationResult:
 
 Message = dict[str, str]
 
+
+def _expand_seeds(seeds: list[int] | int | None, n: int) -> list[int | None]:
+    """Normalise a seed argument to one value per prompt.
+
+    None -> all None (non-deterministic), int -> same seed for every prompt,
+    list -> used as-is (must match n). Keeps per-prompt seeds aligned with the
+    batch so reproducibility survives vLLM batching.
+    """
+    if seeds is None:
+        return [None] * n
+    if isinstance(seeds, int):
+        return [seeds] * n
+    if len(seeds) != n:
+        raise ValueError(f"seeds length {len(seeds)} != number of prompts {n}")
+    return list(seeds)
+
+
 COLLABORATING_AGENT_TAG = "[Note from collaborating agent]:"
 
 
@@ -159,8 +176,24 @@ def messages_to_prompt(
     return prompt
 
 
+def _infer_prompt_render_method(tokenizer: Any) -> str:
+    """chat_template when a tokenizer can apply it; otherwise manual fallback."""
+    if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
+        return "chat_template"
+    return "manual"
+
+
 class BaseBackend:
-    def generate(self, prompt: str, max_new_tokens: int, temperature: float, top_p: float) -> GenerationResult:
+    prompt_render_method: str = "manual"
+
+    def generate(
+        self,
+        prompt: str,
+        max_new_tokens: int,
+        temperature: float,
+        top_p: float,
+        seed: int | None = None,
+    ) -> GenerationResult:
         raise NotImplementedError
 
     def generate_batch(
@@ -169,9 +202,14 @@ class BaseBackend:
         max_new_tokens: int,
         temperature: float,
         top_p: float,
+        seeds: list[int] | int | None = None,
     ) -> list[GenerationResult]:
         """Submit multiple prompts; base implementation is sequential."""
-        return [self.generate(p, max_new_tokens, temperature, top_p) for p in prompts]
+        seed_list = _expand_seeds(seeds, len(prompts))
+        return [
+            self.generate(p, max_new_tokens, temperature, top_p, seed=s)
+            for p, s in zip(prompts, seed_list)
+        ]
 
     def generate_chat(
         self,
@@ -181,9 +219,19 @@ class BaseBackend:
         temperature: float,
         top_p: float,
         prefill: str | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         prompt = self.format_messages(messages, prefill=prefill)
-        return self.generate(prompt, max_new_tokens, temperature, top_p)
+        result = self.generate(prompt, max_new_tokens, temperature, top_p, seed=seed)
+        if prefill:
+            result = GenerationResult(
+                text=prefill + result.text,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                wall_time_s=result.wall_time_s,
+                finish_reason=result.finish_reason,
+            )
+        return result
 
     def generate_chat_batch(
         self,
@@ -192,16 +240,19 @@ class BaseBackend:
         max_new_tokens: int,
         temperature: float,
         top_p: float,
+        seeds: list[int] | int | None = None,
     ) -> list[GenerationResult]:
         """
         Batch variant of generate_chat.
 
         items: list of (messages, prefill) pairs.
+        seeds: per-prompt RNG seeds (list aligned to items), a single int for
+        all, or None for non-deterministic sampling.
         Returns one GenerationResult per item, in the same order.
         Prefill text is prepended to results when supplied.
         """
         prompts = [self.format_messages(msgs, prefill=pre) for msgs, pre in items]
-        raw_results = self.generate_batch(prompts, max_new_tokens, temperature, top_p)
+        raw_results = self.generate_batch(prompts, max_new_tokens, temperature, top_p, seeds=seeds)
         results: list[GenerationResult] = []
         for (_, prefill), res in zip(items, raw_results):
             if prefill:
@@ -233,41 +284,20 @@ class DryRunBackend(BaseBackend):
 
     gold_hint: str | None = None
 
+    def __init__(self) -> None:
+        self.prompt_render_method = "manual"
+
     def format_messages(self, messages: list[Message], *, prefill: str | None = None) -> str:
         return messages_to_prompt(None, messages, prefill=prefill)
 
-    def generate_batch(
+    def generate(
         self,
-        prompts: list[str],
+        prompt: str,
         max_new_tokens: int,
         temperature: float,
         top_p: float,
-    ) -> list[GenerationResult]:
-        """Dry-run batch: call generate() for each prompt (no GPU needed)."""
-        return [self.generate(p, max_new_tokens, temperature, top_p) for p in prompts]
-
-    def generate_chat(
-        self,
-        messages: list[Message],
-        *,
-        max_new_tokens: int,
-        temperature: float,
-        top_p: float,
-        prefill: str | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
-        prompt = self.format_messages(messages, prefill=prefill)
-        result = self.generate(prompt, max_new_tokens, temperature, top_p)
-        if prefill:
-            result = GenerationResult(
-                text=prefill + result.text,
-                prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.completion_tokens,
-                wall_time_s=result.wall_time_s,
-                finish_reason=result.finish_reason,
-            )
-        return result
-
-    def generate(self, prompt: str, max_new_tokens: int, temperature: float, top_p: float) -> GenerationResult:
         start = time.time()
         if "\\boxed{" in prompt:
             answer = self.gold_hint or "1"
@@ -335,6 +365,7 @@ class TransformersBackend(BaseBackend):
         self.model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.prompt_render_method = _infer_prompt_render_method(self.tokenizer)
 
     def format_messages(self, messages: list[Message], *, prefill: str | None = None) -> str:
         return messages_to_prompt(self.tokenizer, messages, prefill=prefill)
@@ -345,6 +376,7 @@ class TransformersBackend(BaseBackend):
         max_new_tokens: int,
         temperature: float,
         top_p: float,
+        seeds: list[int] | int | None = None,
     ) -> list[GenerationResult]:
         """Sequential fallback — TransformersBackend does not support true batching."""
         import warnings
@@ -353,31 +385,26 @@ class TransformersBackend(BaseBackend):
             "Use VLLMBackend for true GPU batching.",
             stacklevel=2,
         )
-        return [self.generate(p, max_new_tokens, temperature, top_p) for p in prompts]
+        seed_list = _expand_seeds(seeds, len(prompts))
+        return [
+            self.generate(p, max_new_tokens, temperature, top_p, seed=s)
+            for p, s in zip(prompts, seed_list)
+        ]
 
-    def generate_chat(
+    def generate(
         self,
-        messages: list[Message],
-        *,
+        prompt: str,
         max_new_tokens: int,
         temperature: float,
         top_p: float,
-        prefill: str | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
-        prompt = self.format_messages(messages, prefill=prefill)
-        result = self.generate(prompt, max_new_tokens, temperature, top_p)
-        if prefill:
-            result = GenerationResult(
-                text=prefill + result.text,
-                prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.completion_tokens,
-                wall_time_s=result.wall_time_s,
-                finish_reason=result.finish_reason,
-            )
-        return result
-
-    def generate(self, prompt: str, max_new_tokens: int, temperature: float, top_p: float) -> GenerationResult:
         import torch
+
+        if seed is not None:
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
 
         start = time.time()
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
@@ -437,30 +464,10 @@ class VLLMBackend(BaseBackend):
             self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
         except Exception:
             pass
+        self.prompt_render_method = _infer_prompt_render_method(self.tokenizer)
 
     def format_messages(self, messages: list[Message], *, prefill: str | None = None) -> str:
         return messages_to_prompt(self.tokenizer, messages, prefill=prefill)
-
-    def generate_chat(
-        self,
-        messages: list[Message],
-        *,
-        max_new_tokens: int,
-        temperature: float,
-        top_p: float,
-        prefill: str | None = None,
-    ) -> GenerationResult:
-        prompt = self.format_messages(messages, prefill=prefill)
-        result = self.generate(prompt, max_new_tokens, temperature, top_p)
-        if prefill:
-            result = GenerationResult(
-                text=prefill + result.text,
-                prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.completion_tokens,
-                wall_time_s=result.wall_time_s,
-                finish_reason=result.finish_reason,
-            )
-        return result
 
     def generate_batch(
         self,
@@ -468,11 +475,24 @@ class VLLMBackend(BaseBackend):
         max_new_tokens: int,
         temperature: float,
         top_p: float,
+        seeds: list[int] | int | None = None,
     ) -> list[GenerationResult]:
-        """Submit all prompts in one vLLM call for maximum GPU utilisation."""
+        """Submit all prompts in one vLLM call for maximum GPU utilisation.
+
+        seeds: per-prompt seeds become a parallel list of SamplingParams (vLLM
+        accepts List[SamplingParams] aligned to the prompt list), so each prompt
+        is seeded independently without splitting the batch.
+        """
         from vllm import SamplingParams
 
-        params = SamplingParams(max_tokens=max_new_tokens, temperature=temperature, top_p=top_p)
+        seed_list = _expand_seeds(seeds, len(prompts))
+        if any(s is not None for s in seed_list):
+            params: list[SamplingParams] | SamplingParams = [
+                SamplingParams(max_tokens=max_new_tokens, temperature=temperature, top_p=top_p, seed=s)
+                for s in seed_list
+            ]
+        else:
+            params = SamplingParams(max_tokens=max_new_tokens, temperature=temperature, top_p=top_p)
         outputs = self.llm.generate(prompts, params)
         results: list[GenerationResult] = []
         for output in outputs:
@@ -490,13 +510,21 @@ class VLLMBackend(BaseBackend):
             ))
         return results
 
-    def generate(self, prompt: str, max_new_tokens: int, temperature: float, top_p: float) -> GenerationResult:
+    def generate(
+        self,
+        prompt: str,
+        max_new_tokens: int,
+        temperature: float,
+        top_p: float,
+        seed: int | None = None,
+    ) -> GenerationResult:
         from vllm import SamplingParams
 
         start = time.time()
         params = SamplingParams(
             max_tokens=max_new_tokens,
             temperature=temperature,
+            seed=seed,
             top_p=top_p,
         )
         outputs = self.llm.generate([prompt], params)

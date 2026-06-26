@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from cot_segmentation import detect_degenerate_trace  # noqa: E402
 from evaluator import extract_domain_answer, is_correct  # noqa: E402
 
 
@@ -126,13 +127,9 @@ def classify_run(run: dict) -> str:
     return "B"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="data/post_injection_runs.jsonl")
-    args = parser.parse_args()
-
+def audit_extraction(input_path: str) -> None:
     runs = []
-    with Path(args.input).open(encoding="utf-8") as f:
+    with Path(input_path).open(encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
             if r.get("variant") == "recovery" and r.get("domain") == "math":
@@ -152,11 +149,124 @@ def main() -> None:
     total = len(runs)
     print(f"Math recovery runs: {total}\n")
     for key in "ABCDE":
-        print(f"  {key}: {counts[key]} ({100 * counts[key] / total:.1f}%)")
+        pct = (100 * counts[key] / total) if total else 0.0
+        print(f"  {key}: {counts[key]} ({pct:.1f}%)")
     for key in "CDE":
         print(f"\n{key} ({counts[key]}):")
         for row in by_cat[key][:15]:
             print(f"  {row}")
+
+
+def audit_baseline_runaway(input_path: str, max_steps: int) -> None:
+    """
+    Read-only check of baseline_cots.jsonl: flag math baselines that were chosen
+    from a runaway/loop trace, and report degenerate samples per task.
+
+    Uses the stored `steps` (recomputed via detect_degenerate_trace) plus the
+    `sample_degenerate*` / `baseline_degenerate_fallback` fields written by the
+    runaway guard in generate_baselines.py.
+    """
+    rows = []
+    with Path(input_path).open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            r = json.loads(line)
+            if r.get("domain") == "math":
+                rows.append(r)
+
+    print(f"Math baseline rows: {len(rows)} (runaway threshold: step_count>{max_steps})\n")
+    print(
+        f"{'task_id':45} {'seed':>4} {'steps':>5} {'degen':>5} "
+        f"{'reason':18} {'fallback':>8} sample_step_counts"
+    )
+    flagged = 0
+    fallback_count = 0
+    for r in rows:
+        steps = r.get("steps", [])
+        chosen_degen, chosen_reason = detect_degenerate_trace(steps, max_steps=max_steps)
+        fallback = bool(r.get("baseline_degenerate_fallback"))
+        # Recompute per-sample degeneracy from stored step counts as a cross-check
+        # (older files may lack sample_degenerate; recompute from step counts).
+        sample_counts = r.get("sample_step_counts", [])
+        stored_degen = r.get("sample_degenerate")
+        if stored_degen is None:
+            n_degen = sum(1 for c in sample_counts if isinstance(c, int) and c > max_steps)
+        else:
+            n_degen = sum(1 for d in stored_degen if d)
+        if chosen_degen or fallback or n_degen:
+            flagged += 1
+        if fallback:
+            fallback_count += 1
+        if chosen_degen or fallback or n_degen:
+            print(
+                f"{str(r.get('task_id'))[:45]:45} {str(r.get('seed')):>4} "
+                f"{len(steps):>5} {('YES' if chosen_degen else 'no'):>5} "
+                f"{str(chosen_reason or '-'):18} {('YES' if fallback else 'no'):>8} "
+                f"{sample_counts}"
+            )
+    print(
+        f"\nFlagged tasks: {flagged}/{len(rows)} | "
+        f"chosen baseline degenerate fallbacks: {fallback_count}"
+    )
+    if flagged == 0:
+        print("OK: no runaway/loop markers in any math baseline.")
+
+    # Math sanity-gate report: tasks where the judge said Correct but det disagreed
+    # and the extracted answer was off by an order of magnitude (judge=Correct flipped
+    # to incorrect before the vote). Surfaces the conflict cases for manual review.
+    print("\n--- judge/det conflict + sanity-gate flips (math) ---")
+    conflict_tasks = 0
+    flip_tasks = 0
+    for r in rows:
+        conflicts = r.get("sample_judge_det_conflict") or []
+        flips = r.get("sample_sanity_gate_flipped") or []
+        n_conflict = sum(1 for c in conflicts if c)
+        n_flip = sum(1 for fl in flips if fl)
+        if n_conflict or n_flip:
+            conflict_tasks += 1 if n_conflict else 0
+            flip_tasks += 1 if n_flip else 0
+            print(
+                f"{str(r.get('task_id'))[:45]:45} "
+                f"conflicts={n_conflict} flips={n_flip} "
+                f"solve_rate={r.get('solve_rate')} verified={r.get('verified')}"
+            )
+    print(
+        f"\nTasks with judge/det conflict: {conflict_tasks} | "
+        f"tasks with sanity-gate flips: {flip_tasks}"
+    )
+    if conflict_tasks == 0:
+        print(
+            "Note: no conflict fields found (older baseline_cots.jsonl predates the "
+            "sanity gate; rerun generate_baselines.py to populate them)."
+        )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        choices=["extraction", "baseline-runaway"],
+        default="extraction",
+        help="extraction: math recovery extraction audit (post_injection_runs); "
+        "baseline-runaway: flag runaway/loop baselines (baseline_cots)",
+    )
+    parser.add_argument("--input", default=None)
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=100,
+        help="Runaway step_count threshold for baseline-runaway mode",
+    )
+    args = parser.parse_args()
+
+    if args.mode == "baseline-runaway":
+        audit_baseline_runaway(
+            args.input or "data/baseline_cots.jsonl", args.max_steps
+        )
+    else:
+        audit_extraction(args.input or "data/post_injection_runs.jsonl")
 
 
 if __name__ == "__main__":

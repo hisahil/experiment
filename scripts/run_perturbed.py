@@ -95,6 +95,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from answer_judge import resolve_det_tolerance, resolve_eval_type  # noqa: E402
 from evaluator import (  # noqa: E402
     classify_recovery_termination,
     extract_domain_answer,
@@ -102,6 +103,14 @@ from evaluator import (  # noqa: E402
 )
 from baseline_index import index_verified_baselines  # noqa: E402
 from experiment_scope import design_lists, get_scope, print_run_plan, select_tasks  # noqa: E402
+from experiment_design import injection_cell_key as injection_key  # noqa: E402
+from grid_validation import (  # noqa: E402
+    compute_midpoint,
+    index_injections,
+    injection_insertion_step,
+    preflight_injections,
+    validate_injection_record,
+)
 from llm_backend import (  # noqa: E402
     BaseBackend,
     DryRunBackend,
@@ -113,7 +122,9 @@ from llm_backend import (  # noqa: E402
 DEFAULT_CONFIG = ROOT / "configs/experiment.yaml"
 
 STOP_PREFILL = {
-    "math": "\n\nTherefore, the final answer is \\boxed{",
+    # L4: emit </think> before the prose so the boxed value is generated AFTER the
+    # think tag and the parser finds it without the L1 in-think fallback.
+    "math": "</think>\n\nTherefore, the final answer is \\boxed{",
 }
 
 # SciBench (numeric) and logic (K&K) use domain-specific prefills below.
@@ -128,6 +139,37 @@ def select_stop_prefill(domain: str, eval_type: str | None) -> str:
     if domain == "logic":
         return STOP_PREFILL_LOGIC
     return STOP_PREFILL.get(domain, STOP_PREFILL["math"])
+
+
+def deterministic_grade(
+    *,
+    extracted_answer: str | None,
+    gold_answer: str,
+    domain: str,
+    eval_type: str | None,
+    math_tolerance: float = 1e-4,
+    science_tolerance: float = 1e-2,
+) -> bool:
+    """Deterministic-only correctness (no LLM judge).
+
+    L0: the judge is decoupled from the GPU run. Script 3 writes det_correct only;
+    scripts/judge_runs.py (Script 3.5) adds the LLM verdict post-hoc. This mirrors
+    the det cross-check inside answer_judge.grade_sample without any API call.
+    """
+    resolved_eval_type = resolve_eval_type(domain, eval_type, gold_answer)
+    det_tol = resolve_det_tolerance(
+        domain,
+        resolved_eval_type,
+        math_tolerance=math_tolerance,
+        science_tolerance=science_tolerance,
+    )
+    det_result = is_correct(
+        extracted_answer,
+        str(gold_answer),
+        resolved_eval_type,
+        math_tolerance=det_tol,
+    )
+    return bool(det_result) if det_result is not None else False
 
 
 def load_yaml(path: Path) -> dict:
@@ -181,108 +223,6 @@ def index_excluded_baselines(
     return out
 
 
-def injection_key(task_id: str, error_type: str, k: int, length_level: str) -> str:
-    """Lookup key for injections_generated.jsonl (matches Script 2 dedup minus target_model)."""
-    return f"{task_id}|{error_type}|{k}|{length_level}"
-
-
-def index_injections(
-    records: list[dict],
-    target_model: str | None = None,
-) -> dict[str, dict]:
-    """task_id|error_type|k|length_level -> injection record (optionally filtered by target_model)."""
-    out: dict[str, dict] = {}
-    for rec in records:
-        rec_model = rec.get("target_model")
-        if target_model and rec_model and rec_model != target_model:
-            continue
-        key = injection_key(
-            rec["task_id"],
-            rec["error_type"],
-            int(rec["k"]),
-            rec["length_level"],
-        )
-        out[key] = rec
-    return out
-
-
-def validate_injection_record(rec: dict, k: int) -> list[str]:
-    """Return human-readable issues when an injection row is structurally unusable."""
-    issues: list[str] = []
-    steps = list(rec.get("injection_steps") or [])
-    if len(steps) != k:
-        issues.append(f"expected {k} injection_steps, got {len(steps)}")
-    if any(not str(s).strip() for s in steps):
-        issues.append("empty injection step(s)")
-    return issues
-
-
-def collect_required_injection_keys(
-    tasks: list[dict],
-    lists: dict,
-) -> list[str]:
-    """All injection keys implied by the selected tasks and scope design axes."""
-    keys: list[str] = []
-    for task in tasks:
-        for error_type in lists["error_types"]:
-            for k in lists["k_injections"]:
-                for length_level in lists["length_levels"]:
-                    keys.append(
-                        injection_key(task["task_id"], error_type, int(k), length_level)
-                    )
-    return keys
-
-
-def preflight_injections(
-    tasks: list[dict],
-    lists: dict,
-    injection_index: dict[str, dict],
-    baseline_index: dict[str, dict],
-) -> tuple[list[str], list[str], list[str]]:
-    """
-    Pre-GPU validation for Script 2 coverage and baseline/injection alignment.
-
-    Returns (missing_keys, invalid_keys, insertion_mismatch_keys).
-    """
-    missing: list[str] = []
-    invalid: list[str] = []
-    insertion_mismatches: list[str] = []
-
-    for task in tasks:
-        task_id = task["task_id"]
-        baseline = baseline_index.get(task_id)
-        live_insertion_step: int | None = None
-        if baseline:
-            steps = list(baseline.get("steps") or [])
-            if steps:
-                live_insertion_step, _ = compute_midpoint(steps)
-
-        for error_type in lists["error_types"]:
-            for k in lists["k_injections"]:
-                k_int = int(k)
-                for length_level in lists["length_levels"]:
-                    key = injection_key(task_id, error_type, k_int, length_level)
-                    rec = injection_index.get(key)
-                    if rec is None:
-                        missing.append(key)
-                        continue
-                    issues = validate_injection_record(rec, k_int)
-                    if issues:
-                        invalid.append(f"{key} ({'; '.join(issues)})")
-                        continue
-                    recorded = injection_insertion_step(rec)
-                    if (
-                        live_insertion_step is not None
-                        and recorded is not None
-                        and recorded != live_insertion_step
-                    ):
-                        insertion_mismatches.append(
-                            f"{key}: injection metadata insertion_step={recorded}, "
-                            f"baseline insertion_step={live_insertion_step}"
-                        )
-    return missing, invalid, insertion_mismatches
-
-
 def report_injection_preflight(
     missing: list[str],
     invalid: list[str],
@@ -333,30 +273,6 @@ def report_injection_preflight(
     return not ok
 
 
-def compute_midpoint(steps: list[str]) -> tuple[int, str]:
-    midpoint = len(steps) // 2
-    prefix = "\n".join(steps[:midpoint])
-    return midpoint, prefix
-
-
-def injection_insertion_step(rec: dict | None) -> int | None:
-    """
-    Return Script 2 insertion_step for audit only.
-
-    Script 3 builds the actual trace from compute_midpoint() on the live baseline;
-    this value is compared and warned on mismatch. Legacy rows may use midpoint_step.
-    """
-    if not rec:
-        return None
-    value = rec.get("insertion_step", rec.get("midpoint_step"))
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def mock_injection_steps(k: int, error_type: str) -> list[str]:
     return [
         f"Step (injected {i + 1}): [{error_type}] Collaborating agent suggests a misleading step."
@@ -372,12 +288,13 @@ def resolve_injection_steps(
     length_level: str,
     *,
     dry_run: bool,
+    allow_step1_only: bool = False,
 ) -> list[str]:
     key = injection_key(task_id, error_type, k, length_level)
     rec = injection_index.get(key)
     if rec:
         steps = list(rec.get("injection_steps") or [])
-        issues = validate_injection_record(rec, k)
+        issues = validate_injection_record(rec, k, allow_step1_only=allow_step1_only)
         if issues:
             raise KeyError(f"Invalid injection for {key}: {'; '.join(issues)}")
         return steps
@@ -403,11 +320,25 @@ def build_output_record(
     finish_reason: str | None = None,
     prompt_tokens: int | None = None,
     recovery_terminated_by: str | None = None,
+    stop_max_tokens: int | None = None,
+    recovery_max_tokens: int | None = None,
+    math_tolerance: float = 1e-4,
+    science_tolerance: float = 1e-2,
 ) -> dict:
     domain = task.get("domain", baseline.get("domain", "math"))
     extracted = extract_domain_answer(raw_output, domain, eval_type)
     gold = str(task.get("gold_answer", baseline.get("gold_answer", "")))
-    correct = is_correct(extracted, gold, eval_type)
+    # L0: deterministic grading only — the LLM judge runs post-hoc in
+    # scripts/judge_runs.py, so the GPU run has no Anthropic dependency. correct
+    # mirrors det_correct until judge_runs.py overwrites it with the verdict.
+    det_correct = deterministic_grade(
+        extracted_answer=extracted,
+        gold_answer=gold,
+        domain=domain,
+        eval_type=eval_type,
+        math_tolerance=math_tolerance,
+        science_tolerance=science_tolerance,
+    )
 
     record: dict = {
         "task_id": task["task_id"],
@@ -419,7 +350,12 @@ def build_output_record(
         "variant": variant,
         "extracted_answer": extracted,
         "gold_answer": gold,
-        "correct": correct,
+        "correct": det_correct,
+        "verifier_score": int(det_correct),
+        "judge_output": "",
+        "judge_raw_output": "",
+        "det_correct": det_correct,
+        "judge_fallback": True,
         "tokens_generated": tokens_generated,
         "finish_reason": finish_reason,
         "prompt_tokens": prompt_tokens,
@@ -428,6 +364,12 @@ def build_output_record(
         "domain": domain,
         "eval_type": eval_type,
     }
+    # Per-row token caps so Script 4 classifies truncation per row (old rows
+    # default to 100/8192 in evaluate.py).
+    if stop_max_tokens is not None:
+        record["stop_max_new_tokens"] = int(stop_max_tokens)
+    if recovery_max_tokens is not None:
+        record["recovery_max_tokens"] = int(recovery_max_tokens)
     if variant == "recovery":
         record["recovery_terminated_by"] = recovery_terminated_by
     return record
@@ -462,6 +404,8 @@ def flush_batch(
     out_path: Path,
     existing_keys: set[str],
     written_counter: list[int],
+    math_tolerance: float = 1e-4,
+    science_tolerance: float = 1e-2,
 ) -> None:
     """
     Process one collected batch: call generate_chat_batch(), write records.
@@ -563,6 +507,10 @@ def flush_batch(
             finish_reason=finish,
             prompt_tokens=prompt_tokens,
             recovery_terminated_by=recovery_terminated_by,
+            stop_max_tokens=stop_max_tokens,
+            recovery_max_tokens=recovery_max_tokens,
+            math_tolerance=math_tolerance,
+            science_tolerance=science_tolerance,
         )
         append_jsonl(out_path, record)
         existing_keys.add(meta["run_key"])
@@ -699,6 +647,9 @@ def main() -> None:
     tasks_path = ROOT / paths.get("tasks", "data/experiment_tasks.jsonl")
     recovery_max_tokens = int(script3.get("recovery_max_tokens", 8192))
     stop_max_tokens = int(script3.get("stop_max_new_tokens", 100))
+    script4_cfg = cfg.get("script4", {})
+    math_tolerance = float(script4_cfg.get("math_tolerance", 1e-4))
+    science_tolerance = float(script4_cfg.get("science_tolerance", 1e-2))
     reasoning_model = bool(script3.get("reasoning_model", model_cfg.get("reasoning_model", False)))
     trace_in_user_turn = bool(script3.get("trace_in_user_turn", False))
     if trace_in_user_turn and not args.dry_run and not args.allow_single_turn:
@@ -807,6 +758,8 @@ def main() -> None:
                 out_path=out_path,
                 existing_keys=existing_keys,
                 written_counter=written_counter,
+                math_tolerance=math_tolerance,
+                science_tolerance=science_tolerance,
             )
             pending_batch.clear()
             batch_index += 1

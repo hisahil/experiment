@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-06-24T21:55:33.843569+00:00",
+  "script": "run_adaptive_dialogue.py",
+  "active_scope": "full_math",
+  "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+  "wall_time_s": 0.7,
+  "dialogues_completed": 54,
+  "stopped_reason": "complete",
+  "dialogue_mode": "adaptive_alternating"
+}

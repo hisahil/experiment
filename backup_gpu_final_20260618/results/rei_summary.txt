@@ -1,0 +1,153 @@
+========================================================================
+REI SUMMARY — Experiment 1: Perturbed Chain-of-Thought
+========================================================================
+
+Clean accuracy source: baseline_cots.jsonl (no clean variant in post_injection_runs).
+Primary REI uses recovery_terminated_by == 'natural' (rei_natural).
+min_denominator_tokens=1 | min_recovery_seeds=2 | min_valid_tasks=60
+
+REI exclusions (per task, min_denominator_tokens guard):
+  rei_natural:
+    total=270  eligible=270  computed=270  computed/eligible=1.0
+    missing_variant=0  nonpositive_delta=0  below_min=0  other=0
+  rei_all:
+    total=270  eligible=270  computed=270  computed/eligible=1.0
+    missing_variant=0  nonpositive_delta=0  below_min=0  other=0
+
+REI (natural, PRIMARY): mean=0.000259  range=[-0.000111, 0.000599]  n=54
+REI (all recovery): mean=0.000253  range=[-0.000098, 0.000582]  n=54
+Accuracy Drop: mean=0.7170  range=[0.0800, 1.0000]  n=54
+Recovery Rate (natural): mean=0.4750  range=[-0.2708, 1.0000]  n=54
+
+REI (natural) by error_type:
+  incorrect_reasoning     : mean=0.000327  n_conditions=18
+  off_topic               : mean=0.000346  n_conditions=18
+  paraphrased_shift       : mean=0.000104  n_conditions=18
+
+REI (natural) by domain:
+  logic                   : mean=0.000186  n_conditions=18
+  math                    : mean=0.000370  n_conditions=18
+  science                 : mean=0.000221  n_conditions=18
+
+REI (natural) by k (injection count):
+  1                       : mean=0.000298  n=18
+  3                       : mean=0.000226  n=18
+  5                       : mean=0.000253  n=18
+
+REI (natural) by length_level:
+  long                    : mean=0.000290  n=27
+  short                   : mean=0.000228  n=27
+
+Recovery Rate (natural) by k:
+  1                       : mean=0.6096  n=71
+  3                       : mean=0.4733  n=80
+  5                       : mean=0.3911  n=79
+
+Recovery Rate (natural) by length_level:
+  long                    : mean=0.5564  n=118
+  short                   : mean=0.4143  n=112
+
+Recovery Rate (natural) by difficulty bin (per task-condition):
+  easy      : mean=0.4872  n=230
+
+CoT length inflation (natural recovery vs baseline word-count proxy):
+  Formula: (tokens_recovery_natural - tokens_baseline) / tokens_baseline
+  overall: mean=+488.25%  range=[-1.13%, +1423.06%]  n=270
+  by k:
+  1                       : mean=+502.47%  n=90
+  3                       : mean=+507.70%  n=90
+  5                       : mean=+454.58%  n=90
+
+  by domain:
+  logic                   : mean=+262.09%  n=90
+  math                    : mean=+531.76%  n=90
+  science                 : mean=+670.89%  n=90
+
+Tasks where recovery harmed accuracy (rei_natural < 0): 22 of 270
+  (acc_recovery_natural < acc_stop with token delta >= min_denominator_tokens)
+  fraction harmed: 8.15%
+
+Overthinking (recovery termination breakdown):
+  extraction_failed : n=43   n_gradable=43   frac=0.0319  acc=0.3256  tokens=2218.72
+  natural           : n=1295 n_gradable=1295 frac=0.9593  acc=0.6093  tokens=1672.26
+  token_limit       : n=12   n_gradable=12   frac=0.0089  acc=0.1667  tokens=8192.0
+  ALL               : n=1350 n_gradable=1350 frac=1.0  acc=0.5963  tokens=1747.62
+
+Stop finish_reason breakdown:
+  stop              : n=846  frac=0.6267  n_gradable=846  acc=0.2175  tokens=33.73
+  length            : n=504  frac=0.3733  n_gradable=504  acc=0.2143  tokens=173.81
+  unknown           : n=0    frac=0.0  n_gradable=0    acc=n/a  tokens=None
+  -> WARNING: 37.3% of stop runs hit token cap (finish_reason=length). Model may be arguing past prefill; stop regime confound for REI. Threshold=5%.
+Prompt tokens (mean): stop=3494.51  recovery=3489.51
+
+Sanity checks (corruption rate on stop rows):
+  incorrect_reasoning     : corruption_rate=0.8822 (thresh=0.7, n=450, ungradable=0)
+  off_topic               : corruption_rate=0.9111 (thresh=0.6, n=450, ungradable=0)
+  paraphrased_shift       : corruption_rate=0.5578 (thresh=0.5, n=450, ungradable=0)
+
+Ungradable runs (no answer parsed): 0 total
+  -> 0 parser-suspect runs: parser weakness excluded as a cause.
+
+Significance tests (paired t-test, overall):
+  recovery_natural_vs_stop    : n_pairs=270/270  mean_diff=0.3899  t=15.3019  p=0.0
+  recovery_all_vs_stop        : n_pairs=270/270  mean_diff=0.38  t=15.0975  p=0.0
+  clean_vs_stop               : n_pairs=270/270  mean_diff=0.717  t=27.4214  p=0.0
+
+WARNING: 54 condition(s) have rei_natural_n_valid < min_valid_tasks=60 (pilot-scale; interpret with care).
+REI validity by condition:
+  logic / incorrect_reasoning / k=1 / long            : rei_natural_n_valid=5
+  logic / incorrect_reasoning / k=1 / short           : rei_natural_n_valid=5
+  logic / incorrect_reasoning / k=3 / long            : rei_natural_n_valid=5
+  logic / incorrect_reasoning / k=3 / short           : rei_natural_n_valid=5
+  logic / incorrect_reasoning / k=5 / long            : rei_natural_n_valid=5
+  logic / incorrect_reasoning / k=5 / short           : rei_natural_n_valid=5
+  logic / off_topic / k=1 / long                      : rei_natural_n_valid=5
+  logic / off_topic / k=1 / short                     : rei_natural_n_valid=5
+  logic / off_topic / k=3 / long                      : rei_natural_n_valid=5
+  logic / off_topic / k=3 / short                     : rei_natural_n_valid=5
+  logic / off_topic / k=5 / long                      : rei_natural_n_valid=5
+  logic / off_topic / k=5 / short                     : rei_natural_n_valid=5
+  logic / paraphrased_shift / k=1 / long              : rei_natural_n_valid=5
+  logic / paraphrased_shift / k=1 / short             : rei_natural_n_valid=5
+  logic / paraphrased_shift / k=3 / long              : rei_natural_n_valid=5
+  logic / paraphrased_shift / k=3 / short             : rei_natural_n_valid=5
+  logic / paraphrased_shift / k=5 / long              : rei_natural_n_valid=5
+  logic / paraphrased_shift / k=5 / short             : rei_natural_n_valid=5
+  math / incorrect_reasoning / k=1 / long             : rei_natural_n_valid=5
+  math / incorrect_reasoning / k=1 / short            : rei_natural_n_valid=5
+  math / incorrect_reasoning / k=3 / long             : rei_natural_n_valid=5
+  math / incorrect_reasoning / k=3 / short            : rei_natural_n_valid=5
+  math / incorrect_reasoning / k=5 / long             : rei_natural_n_valid=5
+  math / incorrect_reasoning / k=5 / short            : rei_natural_n_valid=5
+  math / off_topic / k=1 / long                       : rei_natural_n_valid=5
+  math / off_topic / k=1 / short                      : rei_natural_n_valid=5
+  math / off_topic / k=3 / long                       : rei_natural_n_valid=5
+  math / off_topic / k=3 / short                      : rei_natural_n_valid=5
+  math / off_topic / k=5 / long                       : rei_natural_n_valid=5
+  math / off_topic / k=5 / short                      : rei_natural_n_valid=5
+  math / paraphrased_shift / k=1 / long               : rei_natural_n_valid=5
+  math / paraphrased_shift / k=1 / short              : rei_natural_n_valid=5
+  math / paraphrased_shift / k=3 / long               : rei_natural_n_valid=5
+  math / paraphrased_shift / k=3 / short              : rei_natural_n_valid=5
+  math / paraphrased_shift / k=5 / long               : rei_natural_n_valid=5
+  math / paraphrased_shift / k=5 / short              : rei_natural_n_valid=5
+  science / incorrect_reasoning / k=1 / long          : rei_natural_n_valid=5
+  science / incorrect_reasoning / k=1 / short         : rei_natural_n_valid=5
+  science / incorrect_reasoning / k=3 / long          : rei_natural_n_valid=5
+  science / incorrect_reasoning / k=3 / short         : rei_natural_n_valid=5
+  science / incorrect_reasoning / k=5 / long          : rei_natural_n_valid=5
+  science / incorrect_reasoning / k=5 / short         : rei_natural_n_valid=5
+  science / off_topic / k=1 / long                    : rei_natural_n_valid=5
+  science / off_topic / k=1 / short                   : rei_natural_n_valid=5
+  science / off_topic / k=3 / long                    : rei_natural_n_valid=5
+  science / off_topic / k=3 / short                   : rei_natural_n_valid=5
+  science / off_topic / k=5 / long                    : rei_natural_n_valid=5
+  science / off_topic / k=5 / short                   : rei_natural_n_valid=5
+  science / paraphrased_shift / k=1 / long            : rei_natural_n_valid=5
+  science / paraphrased_shift / k=1 / short           : rei_natural_n_valid=5
+  science / paraphrased_shift / k=3 / long            : rei_natural_n_valid=5
+  science / paraphrased_shift / k=3 / short           : rei_natural_n_valid=5
+  science / paraphrased_shift / k=5 / long            : rei_natural_n_valid=5
+  science / paraphrased_shift / k=5 / short           : rei_natural_n_valid=5
+
+========================================================================

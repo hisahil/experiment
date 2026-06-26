@@ -15,12 +15,19 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from experiment_design import DesignAxes, resolve_design_axes
+
 
 # Domains whose Stage-1 pool is built balanced across a stratum field. When such a
 # domain is capped below its pool size, select_tasks draws evenly per stratum bucket
 # instead of a global shuffle+truncate (which can unbalance the buckets).
-# Example: logic puzzles are balanced over n_people (3/4/5 characters).
-STRATUM_FIELD = {"logic": "n_people"}
+STRATUM_FIELD: dict[str, str] = {}
+
+# Logic coexists K&K + JustLogic: cap 50/50 by logic_source, then balance each
+# half over logic_difficulty_tier (3 buckets per source).
+HIERARCHICAL_STRATUM: dict[str, tuple[str, str]] = {
+    "logic": ("logic_source", "logic_difficulty_tier"),
+}
 
 
 def _stratified_cap(shuffled_pool: list[dict], cap: int, stratum_key: str) -> list[dict]:
@@ -67,6 +74,38 @@ def _stratified_cap(shuffled_pool: list[dict], cap: int, stratum_key: str) -> li
     return selected
 
 
+def _hierarchical_cap(
+    shuffled_pool: list[dict],
+    cap: int,
+    primary_key: str,
+    secondary_key: str,
+) -> list[dict]:
+    """Two-level stratified cap: split across primary buckets, then secondary."""
+    by_primary: dict[Any, list[dict]] = {}
+    for task in shuffled_pool:
+        by_primary.setdefault(task[primary_key], []).append(task)
+
+    primary_keys = sorted(by_primary.keys())
+    if not primary_keys:
+        return []
+
+    base = cap // len(primary_keys)
+    remainder = cap % len(primary_keys)
+    selected: list[dict] = []
+    for i, key in enumerate(primary_keys):
+        allotment = base + (1 if i < remainder else 0)
+        if allotment <= 0:
+            continue
+        sub_pool = by_primary[key]
+        if allotment >= len(sub_pool):
+            selected.extend(sub_pool)
+        elif all(secondary_key in t for t in sub_pool):
+            selected.extend(_stratified_cap(sub_pool, allotment, secondary_key))
+        else:
+            selected.extend(sub_pool[:allotment])
+    return selected
+
+
 def get_scope(cfg: dict, scope_name: str | None = None) -> dict:
     """Return the scope config block by name (a copy, with `name` attached).
 
@@ -88,7 +127,7 @@ def select_tasks(tasks: list[dict], scope: dict, experiment_seed: int) -> list[d
     Three stages, all seeded for reproducibility:
       1. domain filter — keep only scope['domains'].
       2. per-domain cap — max_per_domain (int for all, or dict per domain);
-         logic is drawn balanced over n_people, others shuffle+truncate.
+         logic uses hierarchical source/tier balance; others shuffle+truncate.
       3. total cap — max_tasks_total trims the combined set (no domain balance).
     Output is sorted by task_id for stable ordering downstream.
     """
@@ -118,15 +157,22 @@ def select_tasks(tasks: list[dict], scope: dict, experiment_seed: int) -> list[d
             else:
                 cap = max_per_domain
             stratum_key = STRATUM_FIELD.get(domain)
+            hierarchical = HIERARCHICAL_STRATUM.get(domain)
             if cap is None:
                 # No cap for this domain (e.g. domain absent from the dict).
                 trimmed.extend(pool)
+            elif (
+                hierarchical is not None
+                and int(cap) < len(pool)
+                and all(hierarchical[0] in t and hierarchical[1] in t for t in pool)
+            ):
+                primary_key, secondary_key = hierarchical
+                trimmed.extend(_hierarchical_cap(pool, int(cap), primary_key, secondary_key))
             elif (
                 stratum_key is not None
                 and int(cap) < len(pool)
                 and all(stratum_key in t for t in pool)
             ):
-                # Logic capped below pool size: draw balanced per n_people bucket.
                 trimmed.extend(_stratified_cap(pool, int(cap), stratum_key))
             else:
                 # Math/science, or cap >= pool (full run): take first `cap` of shuffle.
@@ -146,42 +192,111 @@ def select_tasks(tasks: list[dict], scope: dict, experiment_seed: int) -> list[d
     return sorted(filtered, key=lambda t: t["task_id"])
 
 
-def design_lists(cfg: dict, scope: dict) -> dict[str, list[Any]]:
-    """Resolve the experimental axes for a run: scope value, else design default.
+def select_tasks_balanced(
+    tasks: list[dict],
+    scope: dict,
+    experiment_seed: int,
+    per_domain: int,
+) -> list[dict]:
+    """Select `per_domain` tasks from each scope domain (stratified cap when applicable)."""
+    domains = scope.get("domains")
+    if not domains:
+        domains = sorted({t.get("domain", "") for t in tasks if t.get("domain")})
+    balanced_scope = dict(scope)
+    balanced_scope["max_per_domain"] = {str(d): int(per_domain) for d in domains}
+    balanced_scope.pop("max_tasks_total", None)
+    return select_tasks(tasks, balanced_scope, experiment_seed)
 
-    `or` means an empty/missing scope list falls back to cfg['design'] (then to a
-    hardcoded default). These lists drive the full factorial in Scripts 3/4.
+
+def parse_task_shard(spec: str | None) -> tuple[int, int] | None:
+    """Parse a ``--task-shard I/N`` spec into a validated (index, count) pair.
+
+    Returns None when ``spec`` is None/empty (no sharding). Index is 0-based and
+    must satisfy ``0 <= I < N`` with ``N >= 1``. Raises ValueError on bad input.
     """
-    design = cfg.get("design", {})
-    return {
-        "variants": scope.get("variants") or design.get("variants", ["baseline"]),
-        "error_types": scope.get("error_types") or design.get("error_types", []),
-        "k_injections": scope.get("k_injections") or design.get("k_injections", [1]),
-        "length_levels": scope.get("length_levels") or design.get("length_levels", ["short"]),
-        "seeds": scope.get("seeds") or design.get("seeds", [42]),
-    }
+    if spec is None:
+        return None
+    spec = str(spec).strip()
+    if not spec:
+        return None
+    if "/" not in spec:
+        raise ValueError(f"--task-shard must be 'I/N' (got {spec!r})")
+    i_str, n_str = spec.split("/", 1)
+    try:
+        shard_index = int(i_str)
+        shard_count = int(n_str)
+    except ValueError as exc:
+        raise ValueError(f"--task-shard must be integers 'I/N' (got {spec!r})") from exc
+    if shard_count < 1:
+        raise ValueError(f"--task-shard N must be >= 1 (got {shard_count})")
+    if not (0 <= shard_index < shard_count):
+        raise ValueError(
+            f"--task-shard index must satisfy 0 <= I < N (got I={shard_index}, N={shard_count})"
+        )
+    return shard_index, shard_count
 
 
-def count_planned_runs(tasks: list[dict], lists: dict[str, list[Any]]) -> int:
+def apply_task_shard(tasks: list[dict], shard: tuple[int, int] | None) -> list[dict]:
+    """Partition ``tasks`` deterministically by interleaved stride ``tasks[I::N]``.
+
+    Interleaving (not block slicing) spreads easy/hard and short/long tasks evenly
+    across shards, which reduces straggler risk when shards run on separate GPUs.
+    ``tasks`` is assumed pre-sorted (select_tasks sorts by task_id), so the union of
+    all N shards is exactly the input and shards are pairwise disjoint.
+    """
+    if shard is None:
+        return tasks
+    shard_index, shard_count = shard
+    return tasks[shard_index::shard_count]
+
+
+def count_planned_dialogues(tasks: list[dict], lists: dict[str, list[Any]], *, include_neutral: bool) -> int:
+    """Count adaptive dialogue runs for a task grid (not stop/recovery output rows)."""
+    n_error = len(lists.get("error_types") or [])
+    n_k = len(lists.get("k_injections") or [1])
+    n_len = len(lists.get("length_levels") or ["short"])
+    n_seeds = len(lists.get("seeds") or [42])
+    per_task = n_error * n_k * n_len * n_seeds
+    if include_neutral:
+        per_task += n_k * n_len * n_seeds
+    return len(tasks) * per_task
+
+
+def design_lists(cfg: dict, scope: dict) -> dict[str, list[Any]]:
+    """Resolve the experimental axes for a run: scope value, else design default."""
+    return resolve_design_axes(cfg, scope).as_dict()
+
+
+def count_planned_runs(tasks: list[dict], lists: dict[str, list[Any]] | DesignAxes) -> int:
     """Predict the number of model runs a scope will produce (cost preview).
 
     baseline runs  = tasks x seeds (no injection axes).
     perturbed runs = tasks x error_types x k x length x seeds x {stop,recovery}.
     """
+    if isinstance(lists, DesignAxes):
+        axes = lists
+    else:
+        axes = DesignAxes(
+            variants=list(lists.get("variants") or []),
+            error_types=list(lists.get("error_types") or []),
+            k_injections=[int(k) for k in lists.get("k_injections") or [1]],
+            length_levels=list(lists.get("length_levels") or ["short"]),
+            seeds=[int(s) for s in lists.get("seeds") or [42]],
+        )
     n = 0
-    variants = lists["variants"]
+    variants = axes.variants
     # Baseline variant: one clean run per task per seed.
     if "baseline" in variants:
-        n += len(tasks) * len(lists["seeds"])
+        n += len(tasks) * len(axes.seeds)
     # Perturbed variants: full cross product of the injection design axes.
     perturbed = [v for v in variants if v in ("stop", "recovery")]
-    if perturbed and lists["error_types"]:
+    if perturbed and axes.error_types:
         combos = (
             len(tasks)
-            * len(lists["error_types"])
-            * len(lists["k_injections"])
-            * len(lists["length_levels"])
-            * len(lists["seeds"])
+            * len(axes.error_types)
+            * len(axes.k_injections)
+            * len(axes.length_levels)
+            * len(axes.seeds)
         )
         n += combos * len(perturbed)
     return n

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Copy project to HyperStack — run from your Mac.
+#
+# Usage:
+#   export GPU_HOST=user@YOUR_HYPERSTACK_IP
+#   bash scripts/transfer_to_gpu.sh.example
+#
+# Or one-liner:
+#   GPU_HOST=user@1.2.3.4 bash scripts/transfer_to_gpu.sh.example
+
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [[ -z "${GPU_HOST:-}" ]]; then
+  echo "Set GPU_HOST=user@IP first, e.g.:"
+  echo "  export GPU_HOST=ubuntu@203.0.113.10"
+  exit 1
+fi
+
+echo "==> Syncing to ${GPU_HOST}:~/msc_thesis_experiment/"
+rsync -avz --progress \
+  --exclude '.venv' \
+  --exclude '__pycache__' \
+  --exclude '.git' \
+  --exclude '.DS_Store' \
+  --exclude 'data/post_injection_runs.jsonl' \
+  --exclude 'data/complete_dialogues.jsonl' \
+  --exclude 'data/adaptive_dialogues.jsonl' \
+  "${ROOT}/" \
+  "${GPU_HOST}:~/msc_thesis_experiment/"
+
+echo ""
+echo "==> Done. SSH and run:"
+echo "  ssh ${GPU_HOST}"
+echo "  cd ~/msc_thesis_experiment && source .venv/bin/activate"
+echo "  bash scripts/run_gpu_full.sh"

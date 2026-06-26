@@ -1,0 +1,5 @@
+scope,domain,n,cohens_kappa,n_disagreements
+overall,all,2700,0.832663627736558,218
+domain,logic,900,0.9818738419399017,7
+domain,math,900,0.6767116682738669,149
+domain,science,900,0.8589056336603621,62

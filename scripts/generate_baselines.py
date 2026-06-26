@@ -57,8 +57,18 @@ def _fmt_duration(seconds: float) -> str:
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from cot_segmentation import segment_cot, steps_to_baseline_cot  # noqa: E402
-from evaluator import extract_domain_answer, extract_final_answer, is_correct  # noqa: E402
+from answer_judge import grade_sample, write_judge_raw_log  # noqa: E402
+from cot_segmentation import (  # noqa: E402
+    DEFAULT_RUNAWAY_MAX_STEPS,
+    detect_degenerate_trace,
+    segment_cot,
+    steps_to_baseline_cot,
+)
+from evaluator import (  # noqa: E402
+    extract_domain_answer,
+    extract_final_answer,
+    gross_numeric_mismatch,
+)
 from llm_backend import create_backend  # noqa: E402
 
 DEFAULT_BASELINE_CONFIG = ROOT / "configs/baseline_generation.yaml"
@@ -110,10 +120,77 @@ def load_verified_keys(out_path: Path) -> set[str]:
     return keys
 
 
-def append_record(out_path: Path, record: dict) -> None:
+def baseline_record_key(record: dict) -> str:
+    return f"{record['task_id']}|{record['model']}"
+
+
+def dedupe_baseline_file(out_path: Path) -> None:
+    """Keep the last row per task_id|model (fixes append-on-resume duplicates)."""
+    if not out_path.exists():
+        return
+    by_key: dict[str, dict] = {}
+    order: list[str] = []
+    with out_path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            key = baseline_record_key(rec)
+            if key not in by_key:
+                order.append(key)
+            by_key[key] = rec
+    with out_path.open("w", encoding="utf-8") as f:
+        for key in order:
+            f.write(json.dumps(by_key[key], ensure_ascii=False) + "\n")
+
+
+def upsert_baseline_record(out_path: Path, record: dict) -> None:
+    key = baseline_record_key(record)
+    existing: list[dict] = []
+    if out_path.exists():
+        with out_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if baseline_record_key(rec) != key:
+                    existing.append(rec)
+    existing.append(record)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with out_path.open("w", encoding="utf-8") as f:
+        for rec in existing:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def replace_sample_records(
+    samples_path: Path,
+    *,
+    task_id: str,
+    model: str,
+    records: list[dict],
+) -> None:
+    sample_key = f"{task_id}|{model}"
+    kept: list[dict] = []
+    if samples_path.exists():
+        with samples_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if f"{rec.get('task_id')}|{rec.get('model')}" != sample_key:
+                    kept.append(rec)
+    kept.extend(records)
+    samples_path.parent.mkdir(parents=True, exist_ok=True)
+    with samples_path.open("w", encoding="utf-8") as f:
+        for rec in kept:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def append_record(out_path: Path, record: dict) -> None:
+    upsert_baseline_record(out_path, record)
 
 
 def sample_detail_path(out_path: Path) -> Path:
@@ -224,10 +301,25 @@ def main() -> None:
     n_samples = int(merged.get("verification_samples", merged.get("max_retries", 5)))
     majority = n_samples // 2 + 1  # ceil(n_samples / 2): 3 of 5
     min_steps = int(merged.get("min_steps", 3))
+    # Runaway/loop guard threshold: samples with more than this many steps (or an
+    # internal repetition loop) are excluded as baseline candidates so the
+    # max(step_count) selection never picks a degenerate-but-correct sample.
+    runaway_max_steps = int(merged.get("runaway_max_steps", DEFAULT_RUNAWAY_MAX_STEPS))
     base_seed = int(experiment_cfg.get("experiment", {}).get("seed", 42))
 
     model_cfg = dict(experiment_cfg["model"])
+    judge_cfg = dict(experiment_cfg.get("judge", {}))
+    script4_cfg = experiment_cfg.get("script4", {})
+    math_tolerance = float(script4_cfg.get("math_tolerance", 1e-4))
+    science_tolerance = float(script4_cfg.get("science_tolerance", 1e-2))
     models = resolve_models(merged, experiment_cfg, args.model)
+    # vLLM loads a SINGLE model per process. The backend is created once below,
+    # so it MUST use the model we actually run — not whatever model.name happens
+    # to be in experiment.yaml (e.g. the 32B default). When exactly one model is
+    # resolved (the normal case, incl. --model), make it authoritative for the
+    # loaded weights so `--model 7B` truly loads the 7B checkpoint.
+    if len(models) == 1:
+        model_cfg["name"] = models[0]
 
     if not tasks_path.exists():
         print(f"Missing task pool: {tasks_path}", file=sys.stderr)
@@ -240,6 +332,7 @@ def main() -> None:
         tasks = tasks[: args.limit]
 
     verified_keys = load_verified_keys(out_path)
+    dedupe_baseline_file(out_path)
     backend = create_backend(model_cfg, dry_run=args.dry_run)
 
     total_work = len(tasks) * len(models)
@@ -291,6 +384,7 @@ def main() -> None:
 
             gold = str(task["gold_answer"])
             eval_type = task.get("eval_type", "exact")
+            question = str(task.get("prompt", task.get("question", "")))
 
             # Majority-vote solvability filter: draw a FIXED n_samples runs (no early stop).
             # Each sample's vote counts ONLY answer correctness; the min_steps requirement is
@@ -323,6 +417,8 @@ def main() -> None:
                             "parsed_answer": None,
                             "seed": seed,
                             "segmentation_method": "prompt",
+                            "degenerate": False,
+                            "degenerate_reason": None,
                             "error": str(exc),
                         }
                     )
@@ -335,38 +431,101 @@ def main() -> None:
                 parsed = extract_domain_answer(baseline_cot, task.get("domain", "math"), eval_type)
                 if parsed is None:
                     parsed = extract_final_answer(baseline_cot)
-                correct = bool(is_correct(parsed, gold, eval_type))
+                grading = grade_sample(
+                    question=question,
+                    gold_answer=gold,
+                    answer_content=baseline_cot,
+                    extracted_answer=parsed,
+                    domain=task.get("domain", "math"),
+                    eval_type=eval_type,
+                    judge_cfg=judge_cfg,
+                    math_tolerance=math_tolerance,
+                    science_tolerance=science_tolerance,
+                    dry_run=args.dry_run,
+                )
+                judge_raw_path = write_judge_raw_log(
+                    judge_cfg=judge_cfg,
+                    phase="baseline",
+                    task_id=task["task_id"],
+                    grading=grading,
+                    dry_run=args.dry_run,
+                    sample_index=attempt + 1,
+                    seed=seed,
+                    extracted_answer=parsed,
+                    gold_answer=gold,
+                )
+                correct = bool(grading["correct"])
+                # Math sanity gate: the LLM judge stays the primary verdict, but a
+                # judge=Correct / det=Wrong verdict must not survive when the
+                # extracted symbolic answer is off by an order of magnitude
+                # (e.g. counting_159: final 800 vs gold 28800). Equivalent or
+                # non-numeric answers are left to the judge (gross_numeric_mismatch
+                # returns False). Applied before the vote and selection so a
+                # grossly-wrong trace can neither verify nor be chosen for injection.
+                judge_det_conflict = (
+                    eval_type == "symbolic"
+                    and not grading["judge_fallback"]
+                    and grading["correct"] is True
+                    and not grading["det_correct"]
+                )
+                sanity_gate_flipped = judge_det_conflict and gross_numeric_mismatch(
+                    parsed, gold
+                )
+                if sanity_gate_flipped:
+                    correct = False
                 if correct:
                     n_correct += 1
+                is_degenerate, degenerate_reason = detect_degenerate_trace(
+                    steps, max_steps=runaway_max_steps
+                )
                 samples.append(
                     {
                         "correct": correct,
+                        "verifier_score": grading["verifier_score"],
+                        "judge_output": grading["judge_output"],
+                        "judge_raw_output": grading.get("judge_raw_output", ""),
+                        "det_correct": grading["det_correct"],
+                        "judge_fallback": grading["judge_fallback"],
+                        "judge_raw_path": judge_raw_path,
                         "step_count": len(steps),
                         "baseline_cot": baseline_cot,
                         "steps": steps,
                         "parsed_answer": parsed,
                         "seed": seed,
                         "segmentation_method": seg_method,
+                        "degenerate": is_degenerate,
+                        "degenerate_reason": degenerate_reason,
+                        "judge_det_conflict": judge_det_conflict,
+                        "sanity_gate_flipped": sanity_gate_flipped,
                     }
                 )
 
             solve_rate = n_correct / n_samples if n_samples else 0.0
             correct_samples = [s for s in samples if s["correct"]]
 
+            # Runaway/loop guard: exclude degenerate samples (step explosion or
+            # generation loop) as baseline candidates so max(step_count) never
+            # picks one. The solvability vote (n_correct/majority) is untouched.
+            # Fallback: if ALL correct samples are degenerate, fall back to the
+            # full correct set (longest-correct behaviour) and flag the record.
+            non_degenerate_correct = [s for s in correct_samples if not s.get("degenerate")]
+            baseline_pool = non_degenerate_correct or correct_samples
+            degenerate_fallback = bool(correct_samples) and not non_degenerate_correct
+
             # Baseline = correct run with the most steps; step requirement applied only here.
             verified = False
             exclude_reason: str | None = None
             if n_correct >= majority and correct_samples:
-                chosen = max(correct_samples, key=lambda s: s["step_count"])
+                chosen = max(baseline_pool, key=lambda s: s["step_count"])
                 if chosen["step_count"] >= min_steps:
                     verified = True
                 else:
                     exclude_reason = "insufficient_steps"
             else:
-                # Diagnostic baseline: longest correct run if any, else last sample.
+                # Diagnostic baseline: longest non-degenerate correct run if any, else last sample.
                 chosen = (
-                    max(correct_samples, key=lambda s: s["step_count"])
-                    if correct_samples
+                    max(baseline_pool, key=lambda s: s["step_count"])
+                    if baseline_pool
                     else (samples[-1] if samples else {})
                 )
                 exclude_reason = "below_majority"
@@ -392,14 +551,25 @@ def main() -> None:
                 ],
                 "sample_correct": [bool(s.get("correct")) for s in samples],
                 "sample_seeds": [s.get("seed") for s in samples],
+                "sample_degenerate": [bool(s.get("degenerate")) for s in samples],
+                "sample_degenerate_reasons": [
+                    s.get("degenerate_reason") for s in samples
+                ],
+                "baseline_degenerate_fallback": degenerate_fallback,
+                "sample_judge_det_conflict": [
+                    bool(s.get("judge_det_conflict")) for s in samples
+                ],
+                "sample_sanity_gate_flipped": [
+                    bool(s.get("sanity_gate_flipped")) for s in samples
+                ],
             }
             if not verified:
                 record["exclude_reason"] = exclude_reason
 
             append_record(out_path, record)
+            sample_rows = []
             for attempt_idx, sample in enumerate(samples, start=1):
-                append_record(
-                    samples_out_path,
+                sample_rows.append(
                     {
                         "task_id": task["task_id"],
                         "domain": task.get("domain"),
@@ -408,15 +578,30 @@ def main() -> None:
                         "attempt": attempt_idx,
                         "seed": sample.get("seed"),
                         "correct": bool(sample.get("correct")),
+                        "verifier_score": sample.get("verifier_score"),
+                        "judge_output": sample.get("judge_output"),
+                        "judge_raw_path": sample.get("judge_raw_path"),
+                        "det_correct": sample.get("det_correct"),
+                        "judge_fallback": sample.get("judge_fallback"),
                         "step_count": sample.get("step_count", 0),
                         "segmentation_method": sample.get("segmentation_method", "prompt"),
                         "parsed_answer": sample.get("parsed_answer"),
                         "gold_answer": gold,
                         "baseline_cot": sample.get("baseline_cot", ""),
                         "steps": sample.get("steps", []),
+                        "degenerate": bool(sample.get("degenerate")),
+                        "degenerate_reason": sample.get("degenerate_reason"),
+                        "judge_det_conflict": bool(sample.get("judge_det_conflict")),
+                        "sanity_gate_flipped": bool(sample.get("sanity_gate_flipped")),
                         "error": sample.get("error"),
-                    },
+                    }
                 )
+            replace_sample_records(
+                samples_out_path,
+                task_id=task["task_id"],
+                model=model_name,
+                records=sample_rows,
+            )
             done += 1
             short_model = model_name.split("/")[-1]
             method = str(record["segmentation_method"])

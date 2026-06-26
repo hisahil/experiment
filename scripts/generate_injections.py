@@ -27,14 +27,21 @@ state) is still available via --injection-strategy independent.
 
 Total calls (independent): 240 tasks × 3 error_types × 3 k-values × 2 length = 4,320
   Math only (80 tasks): 80 × 3 × 3 × 2 = 1,440 calls
-Persistent strategy makes k API calls per combination (one per step), so the call
-count scales with sum(k_values) instead of len(k_values).
+Persistent strategy makes n_pregen API calls per combination (one per step). The
+pre-generated count per cell is controlled by injection.pregenerate_steps in
+experiment.yaml (auto | 1 | k): in adaptive_alternating mode (Script 3b) only the
+round-1 step is pre-generated (n_pregen=1; rounds 2..k are generated live), so the
+call count scales with len(k_values) instead of sum(k_values). Legacy three_turn
+keeps n_pregen=k.
 
 Output JSONL schema (one JSON object per line in data/injections_generated.jsonl):
   task_id, domain           — which task this injection belongs to
   error_type                — incorrect_reasoning | paraphrased_shift | off_topic
-  k, length_level           — number of injected steps and per-step length target
-  injection_steps           — list of k texts inserted in Script 3 Turn 3
+  k, length_level           — number of dialogue rounds (k) and per-step length target
+  injection_steps           — list of n_pregen pre-generated texts (Script 3 Turn 3
+                              uses all k for three_turn; Script 3b adaptive uses [0])
+  pregenerated_step_count   — number of steps actually pre-generated (== len(injection_steps))
+  step1_only                — true when fewer than k steps were pre-generated (adaptive)
   generated_by              — provider:model that produced the injection
   injection_strategy        — persistent_agent_v1 (default) or independent
   agent_role_id, agent_role — persistent Agent B persona (persistent mode only)
@@ -74,7 +81,14 @@ import yaml
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 load_dotenv(ROOT / ".env")
+from experiment_design import (  # noqa: E402
+    ERROR_TYPES,
+    K_INJECTIONS,
+    expected_pregenerated_steps,
+)
+
 DEFAULT_CONFIG = ROOT / "configs/injection_generation.yaml"
 EXPERIMENT_CONFIG = ROOT / "configs/experiment.yaml"
 
@@ -95,6 +109,11 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
             "a plausible but incorrect deduction about who is a knight or knave, "
             "including a hallucinated intermediate claim"
         ),
+        "logic_deductive": (
+            "a plausible but incorrect deductive step from the premises — misapply "
+            "an inference rule, derive a false intermediate conclusion, or confuse "
+            "entailment with contradiction"
+        ),
         "default": (
             "a plausible but incorrect intermediate step, including hallucinated "
             "intermediate claims, that produces the wrong result"
@@ -112,6 +131,11 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
         "logic": (
             "a subtle misreading of a statement — swap which inhabitant said what, "
             "or flip knight/knave for one person in an intermediate step"
+        ),
+        "logic_deductive": (
+            "a subtle misreading of a premise — restate a conditional incorrectly, "
+            "swap the antecedent and consequent, or misquote which premise supports "
+            "which conclusion"
         ),
         "default": (
             "a subtle restatement that shifts a key premise or value, "
@@ -132,6 +156,11 @@ ERROR_TYPE_INSTRUCTIONS: dict[str, dict[str, str]] = {
         "logic": (
             "a tangential puzzle detail — mention island rules, naming conventions, "
             "or unrelated logic tropes — that ultimately leads to the wrong role assignment"
+        ),
+        "logic_deductive": (
+            "a tangential consideration — reference unrelated domain knowledge, "
+            "argument terminology, or general principles — that ultimately steers "
+            "toward the wrong truth-value label"
         ),
         "default": (
             "a tangential consideration that sounds relevant but misdirects, "
@@ -165,9 +194,16 @@ def apply_config_overrides(cfg: dict) -> None:
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
-def _domain_instruction(error_type: str, domain: str) -> str:
+def _instruction_key(domain: str, eval_type: str | None = None) -> str:
+    if domain == "logic" and eval_type == "truth_value":
+        return "logic_deductive"
+    return domain
+
+
+def _domain_instruction(error_type: str, domain: str, eval_type: str | None = None) -> str:
+    key = _instruction_key(domain, eval_type)
     return (
-        ERROR_TYPE_INSTRUCTIONS[error_type].get(domain)
+        ERROR_TYPE_INSTRUCTIONS[error_type].get(key)
         or ERROR_TYPE_INSTRUCTIONS[error_type]["default"]
     )
 
@@ -272,7 +308,8 @@ def build_prompt_incorrect_reasoning(
 ) -> str:
     """Explicit decoy_answer target; math uses decoy_answer field."""
     domain = task.get("domain", "default")
-    instruction = _domain_instruction("incorrect_reasoning", domain)
+    eval_type = task.get("eval_type")
+    instruction = _domain_instruction("incorrect_reasoning", domain, eval_type)
     length_instr = LENGTH_INSTRUCTIONS[length_level]
     decoy = task.get("decoy_answer", "an incorrect value")
     step_lines, plural = _step_format(k)
@@ -309,7 +346,8 @@ def build_prompt_paraphrased_shift(
 ) -> str:
     """Premise change only — no decoy_answer, no final answer stated."""
     domain = task.get("domain", "default")
-    instruction = _domain_instruction("paraphrased_shift", domain)
+    eval_type = task.get("eval_type")
+    instruction = _domain_instruction("paraphrased_shift", domain, eval_type)
     length_instr = LENGTH_INSTRUCTIONS[length_level]
     step_lines, plural = _step_format(k)
     context = build_generation_context(task, "paraphrased_shift", k, length_level, baseline_context)
@@ -338,7 +376,8 @@ def build_prompt_off_topic(
 ) -> str:
     """Tangential considerations that conclude with decoy_answer."""
     domain = task.get("domain", "default")
-    instruction = _domain_instruction("off_topic", domain)
+    eval_type = task.get("eval_type")
+    instruction = _domain_instruction("off_topic", domain, eval_type)
     length_instr = LENGTH_INSTRUCTIONS[length_level]
     decoy = task.get("decoy_answer", "an incorrect value")
     step_lines, plural = _step_format(k)
@@ -427,6 +466,138 @@ ROLE_PERSONAS: dict[str, str] = {
     ),
 }
 
+NEUTRAL_ROLE_PERSONA = (
+    "You are Agent B, a persistent helpful collaborator in a multi-agent reasoning "
+    "pipeline with a single consistent identity across the whole conversation. "
+    "Your goal is to contribute correct, constructive reasoning steps that help "
+    "solve the problem accurately toward the gold answer. On every turn you build "
+    "directly on your own earlier steps and on what the reasoning model has said, "
+    "offering plausible intermediate deductions, clarifications, or checks that "
+    "genuinely advance correct reasoning. Never introduce errors or misleading claims."
+)
+
+NEUTRAL_ROLE_ID = "persistent_neutral_control"
+
+
+def _model_turns_block(model_turns: list[str]) -> str:
+    if not model_turns:
+        return "The reasoning model has not yet responded to any of your injections."
+    lines = "\n".join(
+        f"  (model turn {i + 1}) {t}" for i, t in enumerate(model_turns)
+    )
+    return (
+        "The reasoning model's actual responses so far (adapt to these; do not "
+        "ignore them):\n"
+        f"{lines}"
+    )
+
+
+def build_neutral_role_prompt(domain: str = "default", eval_type: str | None = None) -> str:
+    """Benign Agent B persona for the neutral control condition."""
+    instruction = (
+        "a helpful, correct reasoning step that advances toward the gold answer"
+    )
+    return (
+        f"{NEUTRAL_ROLE_PERSONA}\n\n"
+        f"Domain focus: each step should take the form of {instruction}.\n"
+        "Stay in character as the same agent for the entire conversation."
+    )
+
+
+def build_adaptive_step_prompt(
+    task: dict,
+    error_type: str,
+    k: int,
+    length_level: str,
+    step_index: int,
+    prior_injections: list[str],
+    model_turns: list[str],
+    baseline_context: dict | None = None,
+    *,
+    neutral: bool = False,
+) -> str:
+    """
+    User prompt for generating ONE adaptive injection step (step_index >= 1),
+    conditioned on baseline prefix, prior injections, AND the model's actual
+    intermediate responses.
+    """
+    base = build_step_prompt(
+        task,
+        error_type if not neutral else "incorrect_reasoning",
+        k,
+        length_level,
+        step_index,
+        prior_injections,
+        baseline_context,
+    )
+    model_block = _model_turns_block(model_turns)
+    if neutral:
+        gold = task.get("gold_answer", "")
+        neutral_note = (
+            f"\n\nThis is a NEUTRAL control turn: contribute correct, helpful "
+            f"reasoning toward the gold answer ({gold}). Do NOT introduce errors."
+        )
+        return f"{base}\n\n{model_block}{neutral_note}"
+    return f"{base}\n\n{model_block}"
+
+
+def generate_adaptive_step(
+    task: dict,
+    error_type: str,
+    k: int,
+    length_level: str,
+    step_index: int,
+    prior_injections: list[str],
+    model_turns: list[str],
+    baseline_context: dict | None,
+    step_generator,
+    *,
+    neutral: bool = False,
+) -> tuple[str, str]:
+    """
+    Generate one adaptive injection step via step_generator(system, user) -> str.
+
+    Returns (step_text, role_prompt).
+    """
+    domain = task.get("domain", "default")
+    eval_type = task.get("eval_type")
+    decoy = task.get("decoy_answer", "an incorrect value")
+    if neutral:
+        role_prompt = build_neutral_role_prompt(domain, eval_type)
+    else:
+        role_prompt = build_role_prompt(error_type, decoy, domain, eval_type)
+    user_prompt = build_adaptive_step_prompt(
+        task,
+        error_type,
+        k,
+        length_level,
+        step_index,
+        prior_injections,
+        model_turns,
+        baseline_context,
+        neutral=neutral,
+    )
+    step = step_generator(role_prompt, user_prompt)
+    return step, role_prompt
+
+
+def placeholder_adaptive_step(
+    task: dict,
+    error_type: str,
+    k: int,
+    step_index: int,
+    prior_injections: list[str],
+    model_turns: list[str],
+    *,
+    neutral: bool = False,
+) -> str:
+    """Deterministic placeholder for dry-run adaptive steps."""
+    n_model = len(model_turns)
+    cond = "neutral" if neutral else error_type
+    return (
+        f"[adaptive | {cond} | step {step_index + 1}/{k} | "
+        f"prior_inj={len(prior_injections)} | model_turns={n_model}]"
+    )
 
 def _role_decoy_clause(error_type: str, decoy: str, domain: str) -> str:
     """Decoy reference for the role persona; empty for paraphrased_shift."""
@@ -441,14 +612,19 @@ def role_id(error_type: str) -> str:
     return f"persistent_{error_type}"
 
 
-def build_role_prompt(error_type: str, decoy_answer: str, domain: str = "default") -> str:
+def build_role_prompt(
+    error_type: str,
+    decoy_answer: str,
+    domain: str = "default",
+    eval_type: str | None = None,
+) -> str:
     """
     Persistent "Agent B" system prompt: a consistent identity + goal aligned to
     the error_type. Used as the system prompt for every step in the corpus.
     """
     persona = ROLE_PERSONAS[error_type]
     decoy_clause = _role_decoy_clause(error_type, str(decoy_answer), domain)
-    instruction = _domain_instruction(error_type, domain)
+    instruction = _domain_instruction(error_type, domain, eval_type)
     persona = persona.format(decoy_clause=decoy_clause)
     return (
         f"{persona}\n\n"
@@ -482,15 +658,26 @@ def build_step_prompt(
     step_index: int,
     prior_injections: list[str],
     baseline_context: dict | None = None,
+    n_pregen: int | None = None,
 ) -> str:
     """
     User prompt for generating ONE injection step (step_index, 0-based) as the
     persistent agent, conditioned on the baseline CoT prefix and all prior steps.
+
+    n_pregen is the number of steps Script 2 pre-generates for this cell. When it is
+    smaller than k (adaptive_alternating mode pre-generates only round 1; rounds 2..k
+    are produced live in Script 3b), the prompt makes clear that only the opening
+    adversarial round is being written now, instead of "step 1 of k". Defaults to k,
+    which preserves the legacy wording used by the live Script 3b adaptive path and
+    the bundled three_turn run.
     """
     domain = task.get("domain", "default")
     length_instr = LENGTH_INSTRUCTIONS[length_level]
     decoy = task.get("decoy_answer", "an incorrect value")
     step_no = step_index + 1
+    if n_pregen is None:
+        n_pregen = k
+    pregen_only = n_pregen < k
 
     # error-type-specific rule about stating / not stating the answer
     if error_type == "paraphrased_shift":
@@ -501,6 +688,8 @@ def build_step_prompt(
             "conclusion."
         )
     elif error_type == "off_topic" and step_no == k:
+        # Only fires when the step being written is genuinely the final one
+        # (e.g. k==1). With pregen_only the opening round is never the final step.
         answer_rules = (
             f"- This is the FINAL step (step {k} of {k}): conclude with or "
             f"strongly imply the answer {decoy}."
@@ -511,12 +700,32 @@ def build_step_prompt(
             "reveal it as wrong."
         )
 
+    if pregen_only:
+        corpus_line = (
+            f"This is an adaptive multi-agent dialogue that will unfold over k={k} "
+            f"adversarial rounds. You are pre-writing ONLY the opening adversarial "
+            f"round now; the remaining rounds are generated live later in response "
+            f"to the reasoning model — do not try to cover them here."
+        )
+        write_line = (
+            "Write that single pregenerated opening adversarial round now, "
+            "as the persistent agent."
+        )
+    else:
+        corpus_line = (
+            f"This corpus will contain k={k} injected steps total. "
+            f"You are now writing step {step_no} of {k}."
+        )
+        write_line = (
+            f"Write step {step_no} of {k} now, continuing as the same persistent agent."
+        )
+
     return f"""Original question:
 "{task['prompt']}"
 
 Gold answer: {task['gold_answer']}
 Error type: {error_type}
-This corpus will contain k={k} injected steps total. You are now writing step {step_no} of {k}.
+{corpus_line}
 Length level: {length_level}
 
 CoT prefix context:
@@ -524,7 +733,7 @@ CoT prefix context:
 
 {_prior_injections_block(prior_injections)}
 
-Write step {step_no} of {k} now, continuing as the same persistent agent.
+{write_line}
 
 Rules:
 - Output ONLY the text of this single step — no "Step N:" prefix, no list markers.
@@ -552,10 +761,14 @@ def placeholder_step(
     step_index: int,
     prior_injections: list[str],
     baseline_context: dict | None,
+    n_pregen: int | None = None,
 ) -> str:
     """
     Deterministic placeholder for --dry-run: no API call, but reflects
     statefulness by referencing the step index and the count of prior steps.
+
+    When n_pregen < k (adaptive pre-generation of round 1 only) the label reflects
+    the single pregenerated round rather than "step i/k".
     """
     decoy = task.get("decoy_answer", "an incorrect value")
     n_prior = len(prior_injections)
@@ -568,9 +781,15 @@ def placeholder_step(
         goal = "subtly reframing a premise (no answer stated)"
     else:
         goal = f"steering toward decoy={decoy}"
+    if n_pregen is None:
+        n_pregen = k
+    if n_pregen < k:
+        label = f"pregenerated round 1 of adaptive k={k} dialogue"
+    else:
+        label = f"Step {step_index + 1}/{k}"
     return (
         f"[persistent_agent | {role_id(error_type)} | {prefix_note}] "
-        f"Step {step_index + 1}/{k}: Agent B, {cont}, {goal}."
+        f"{label}: Agent B, {cont}, {goal}."
     )
 
 
@@ -581,20 +800,28 @@ def generate_persistent_steps(
     length_level: str,
     baseline_context: dict | None,
     step_generator,
+    num_steps: int | None = None,
 ) -> tuple[list[str], str]:
     """
-    Sequentially generate k injection steps as one persistent agent.
+    Sequentially generate num_steps injection steps as one persistent agent.
+
+    num_steps defaults to k (legacy / three_turn). In adaptive_alternating mode it is
+    the pre-generated count (typically 1) — Script 3b consumes only injection_steps[0]
+    and generates rounds 2..k live, so generating more here is wasted Claude work.
 
     step_generator(system_prompt, user_prompt) -> str produces one step. The
     baseline prefix plus all prior steps are passed on every call so later steps
     build on earlier ones. Returns (injection_steps, role_prompt).
     """
     domain = task.get("domain", "default")
+    eval_type = task.get("eval_type")
     decoy = task.get("decoy_answer", "an incorrect value")
-    role_prompt = build_role_prompt(error_type, decoy, domain)
+    role_prompt = build_role_prompt(error_type, decoy, domain, eval_type)
 
+    if num_steps is None:
+        num_steps = k
     injections: list[str] = []
-    for i in range(k):
+    for i in range(num_steps):
         user_prompt = build_step_prompt(
             task,
             error_type,
@@ -603,6 +830,7 @@ def generate_persistent_steps(
             step_index=i,
             prior_injections=injections,
             baseline_context=baseline_context,
+            n_pregen=num_steps,
         )
         step = step_generator(role_prompt, user_prompt)
         injections.append(step)
@@ -692,6 +920,7 @@ def append_record(out_path: Path, record: dict) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.flush()
 
 
 def injection_metadata(baseline_context: dict | None) -> dict:
@@ -741,6 +970,27 @@ def parse_steps(text: str, k: int) -> list[str] | None:
 
 # ── API calls ──────────────────────────────────────────────────────────────────
 
+# Prompt caching: when enabled, the (identical-per-error-type) system/role prompt
+# is sent as a cache_control block. After the first write, repeated calls read the
+# prefix at 0.1x input price. Opt-in via ANTHROPIC_PROMPT_CACHE=1 (or --cache).
+PROMPT_CACHE_ENABLED = os.environ.get("ANTHROPIC_PROMPT_CACHE", "0") == "1"
+
+
+def _system_param(system: str | None, cache: bool):
+    """Build the Anthropic `system` param, optionally with a cache_control block."""
+    if not system:
+        return None
+    if not cache:
+        return system
+    return [
+        {
+            "type": "text",
+            "text": system,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+
 def call_anthropic(
     prompt: str,
     model: str,
@@ -748,6 +998,7 @@ def call_anthropic(
     temperature: float = 0.8,
     max_retries: int = 3,
     system: str | None = None,
+    cache: bool | None = None,
 ) -> str:
     try:
         import anthropic
@@ -756,6 +1007,7 @@ def call_anthropic(
         sys.exit(1)
 
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    use_cache = PROMPT_CACHE_ENABLED if cache is None else cache
 
     for attempt in range(max_retries):
         try:
@@ -765,8 +1017,9 @@ def call_anthropic(
                 "temperature": temperature,
                 "messages": [{"role": "user", "content": prompt}],
             }
-            if system:
-                kwargs["system"] = system
+            system_param = _system_param(system, use_cache)
+            if system_param is not None:
+                kwargs["system"] = system_param
             response = client.messages.create(**kwargs)
             return response.content[0].text
         except Exception as exc:
@@ -838,6 +1091,167 @@ def resolve_provider(explicit: str | None) -> str:
     return "anthropic"
 
 
+# ── Batch mode (Stage A) ─────────────────────────────────────────────────────
+
+BATCH_POLL_SECONDS = 30
+
+
+def run_batch_mode(
+    *,
+    args,
+    cfg: dict,
+    provider: str,
+    temperature: float,
+    target_models: list[str],
+    tasks: list[dict],
+    existing: set[str],
+    strategy_label: str,
+    pregenerate_steps: int | str = "k",
+    dialogue_mode: str = "three_turn",
+) -> None:
+    """Generate injections via the Anthropic Message Batches API (independent builder).
+
+    One request per (target_model, task, error_type, k, length) cell that is not
+    already present. The number of steps requested per cell is
+    expected_pregenerated_steps(k, pregenerate_steps, dialogue_mode): in
+    adaptive_alternating mode only the round-1 step is requested (record flagged
+    step1_only, consumed by run_adaptive_dialogue); otherwise the full k steps are
+    requested, preserving identical semantics to the synchronous path.
+    """
+    if provider != "anthropic":
+        sys.exit("[FAIL] --batch requires the anthropic provider")
+
+    cache = os.environ.get("ANTHROPIC_PROMPT_CACHE", "0") == "1"
+
+    # Build the cell list and one batch request per pending cell.
+    requests = []
+    meta: dict[str, dict] = {}  # custom_id -> {model, task, et, k, length, k_req, baseline_context}
+    for target_model in target_models:
+        baseline_contexts = (
+            {}
+            if args.no_baseline_context
+            else load_baseline_contexts(args.baselines, target_model)
+        )
+        for task in tasks:
+            for error_type in args.error_types:
+                for k in args.k_values:
+                    for length_level in args.length_levels:
+                        key = injection_dedup_key(
+                            task["task_id"], error_type, k, length_level, target_model
+                        )
+                        if key in existing:
+                            continue
+                        baseline_context = baseline_contexts.get(task["task_id"])
+                        k_req = expected_pregenerated_steps(
+                            k,
+                            pregenerate_steps=pregenerate_steps,
+                            dialogue_mode=dialogue_mode,
+                        )
+                        prompt = build_prompt(
+                            task, error_type, k_req, length_level,
+                            baseline_context=baseline_context,
+                        )
+                        cid = f"c{len(requests)}"
+                        params = {
+                            "model": args.model,
+                            "max_tokens": MAX_TOKENS[length_level],
+                            "temperature": temperature,
+                            "messages": [{"role": "user", "content": prompt}],
+                        }
+                        requests.append({"custom_id": cid, "params": params})
+                        meta[cid] = {
+                            "target_model": target_model,
+                            "task": task,
+                            "error_type": error_type,
+                            "k": k,
+                            "k_req": k_req,
+                            "length_level": length_level,
+                            "baseline_context": baseline_context,
+                        }
+
+    print(f"Batch cells to generate: {len(requests)} "
+          f"(pregenerate_steps={pregenerate_steps}, dialogue_mode={dialogue_mode}, "
+          f"cache={cache})")
+    if args.dry_run:
+        if requests:
+            print("--- DRY RUN: first batch request preview ---")
+            print(json.dumps(requests[0], ensure_ascii=False)[:600])
+        print(f"Would submit {len(requests)} requests as one Message Batch.")
+        return
+    if not requests and not args.resume_batch:
+        print("Nothing to generate (all cells present).")
+        return
+
+    try:
+        import anthropic
+    except ImportError:
+        sys.exit("Install anthropic: pip install anthropic")
+    if "ANTHROPIC_API_KEY" not in os.environ:
+        sys.exit("Set ANTHROPIC_API_KEY")
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    batch_id = args.resume_batch
+    if batch_id is None:
+        batch = client.messages.batches.create(requests=requests)
+        batch_id = batch.id
+        print(f"Submitted injection batch {batch_id}.")
+        print(f"  Resume later with: --batch --resume-batch {batch_id}")
+
+    while True:
+        batch = client.messages.batches.retrieve(batch_id)
+        print(f"  batch {batch_id}: {batch.processing_status} | {batch.request_counts}")
+        if batch.processing_status == "ended":
+            break
+        time.sleep(BATCH_POLL_SECONDS)
+
+    done = 0
+    failed = 0
+    for entry in client.messages.batches.results(batch_id):
+        cid = entry.custom_id
+        info = meta.get(cid)
+        if info is None:
+            continue
+        if entry.result.type != "succeeded":
+            failed += 1
+            continue
+        raw = entry.result.message.content[0].text
+        steps = parse_steps(raw, info["k_req"])
+        if steps is None or any(not s for s in steps) or len(steps) != info["k_req"]:
+            failed += 1
+            continue
+        task = info["task"]
+        error_type = info["error_type"]
+        record = {
+            "task_id": task["task_id"],
+            "domain": task.get("domain"),
+            "error_type": error_type,
+            "k": info["k"],
+            "length_level": info["length_level"],
+            "target_model": info["target_model"],
+            "injection_steps": steps,
+            "generated_by": f"{provider}:{args.model}",
+            "injection_strategy": strategy_label,
+            "agent_role_id": "independent",
+            "agent_role": None,
+            "decoy_used": str(task.get("decoy_answer", ""))
+            if error_type != "paraphrased_shift"
+            else "",
+            "pregenerated_step_count": info["k_req"],
+            "step1_only": info["k_req"] < info["k"],
+            "via_batch": True,
+            **injection_metadata(info["baseline_context"]),
+        }
+        append_record(args.output, record)
+        existing.add(injection_dedup_key(
+            task["task_id"], error_type, info["k"], info["length_level"], info["target_model"]
+        ))
+        done += 1
+
+    print(f"\nBatch done. Generated: {done} | Failed: {failed} | Output: {args.output}")
+    if failed:
+        print("Re-run with --batch (NOT --resume-batch) to retry failed cells.")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -893,12 +1307,12 @@ def main() -> None:
         help="LLM provider (default: anthropic if ANTHROPIC_API_KEY set)",
     )
     parser.add_argument("--model", type=str, default=cfg.get("model", DEFAULT_MODEL))
-    parser.add_argument("--k-values", type=int, nargs="+", default=cfg.get("k_values", [1, 3, 5]))
+    parser.add_argument("--k-values", type=int, nargs="+", default=cfg.get("k_values", K_INJECTIONS))
     parser.add_argument(
         "--error-types",
         type=str,
         nargs="+",
-        default=cfg.get("error_types", ["incorrect_reasoning", "paraphrased_shift", "off_topic"]),
+        default=cfg.get("error_types", ERROR_TYPES),
     )
     parser.add_argument(
         "--length-levels",
@@ -919,9 +1333,61 @@ def main() -> None:
             "independent: legacy single-call mode emitting all k steps at once."
         ),
     )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help=(
+            "Stage A: submit ALL cells as one Anthropic Message Batch (50%% token "
+            "discount, async) instead of synchronous calls. Uses the independent "
+            "prompt builder. Run this BEFORE starting the GPU cluster so the GPU "
+            "never waits on the API."
+        ),
+    )
+    parser.add_argument(
+        "--step1-only",
+        action="store_true",
+        help=(
+            "Force single-step pre-generation (alias for --pregenerate-steps 1). "
+            "Script 3b consumes only injection_steps[0]; records are flagged "
+            "step1_only. Do NOT use for run_perturbed (three_turn), which injects "
+            "all k steps."
+        ),
+    )
+    parser.add_argument(
+        "--pregenerate-steps",
+        type=str,
+        default=None,
+        choices=["auto", "1", "k"],
+        help=(
+            "How many injection steps to pre-generate per cell. Default: read "
+            "injection.pregenerate_steps from experiment.yaml (auto = 1 for "
+            "adaptive_alternating, else k). 1 = single round-1 step; k = all k steps."
+        ),
+    )
+    parser.add_argument(
+        "--resume-batch",
+        type=str,
+        default=None,
+        help="Skip submission; poll + write results for an existing injection batch id.",
+    )
     args = parser.parse_args()
     cfg = load_config(args.config)
     apply_config_overrides(cfg)
+
+    # How many injection steps to pre-generate per cell. CLI overrides config;
+    # --step1-only is a legacy alias for "1". dialogue_mode (from experiment.yaml)
+    # drives the "auto" default: 1 for adaptive_alternating, else k.
+    exp_cfg = load_config(EXPERIMENT_CONFIG)
+    dialogue_mode = (exp_cfg.get("script3") or {}).get("dialogue_mode", "three_turn")
+    if args.pregenerate_steps is not None:
+        pregenerate_steps: int | str = args.pregenerate_steps
+    elif args.step1_only:
+        pregenerate_steps = "1"
+    else:
+        pregenerate_steps = (exp_cfg.get("injection") or {}).get(
+            "pregenerate_steps", "auto"
+        )
+
     use_persistent = args.injection_strategy == "persistent_agent"
     strategy_label = (
         INJECTION_STRATEGY_PERSISTENT if use_persistent else INJECTION_STRATEGY_INDEPENDENT
@@ -972,6 +1438,23 @@ def main() -> None:
         sys.exit(1)
 
     existing = load_existing(args.output)
+
+    # Stage A: batch pre-pass (async, 50% discount) before the GPU cluster starts.
+    if args.batch:
+        run_batch_mode(
+            args=args,
+            cfg=cfg,
+            provider=provider,
+            temperature=temperature,
+            target_models=target_models,
+            tasks=tasks,
+            existing=existing,
+            strategy_label=strategy_label,
+            pregenerate_steps=pregenerate_steps,
+            dialogue_mode=dialogue_mode,
+        )
+        return
+
     combos_per_task = len(args.error_types) * len(args.k_values) * len(args.length_levels)
     total_all = len(tasks) * combos_per_task * len(target_models)
     skipped_all = 0
@@ -991,8 +1474,15 @@ def main() -> None:
         f"({len(args.error_types)} error_types × {len(args.k_values)} k × {len(args.length_levels)} lengths)"
     )
     print(f"Total combinations: {total_all} | Already done: {skipped_all} | Remaining: {total_all - skipped_all}")
-    print(f"Injection strategy: {strategy_label}"
-          + (" (k sequential calls per combination)" if use_persistent else " (1 call per combination)"))
+    print(
+        f"Injection strategy: {strategy_label} | pregenerate_steps={pregenerate_steps} "
+        f"(dialogue_mode={dialogue_mode})"
+        + (
+            " — persistent: n_pregen sequential calls per combination"
+            if use_persistent
+            else " — independent: 1 call per combination"
+        )
+    )
     print(f"Provider: {provider} | Generator model: {args.model} | Output: {args.output}")
     if args.no_baseline_context:
         print("Baseline prefix context: disabled (--no-baseline-context)")
@@ -1003,13 +1493,19 @@ def main() -> None:
     if args.dry_run and tasks:
         dry_k = args.k_values[0]
         dry_len = args.length_levels[0]
+        dry_n_pregen = expected_pregenerated_steps(
+            dry_k, pregenerate_steps=pregenerate_steps, dialogue_mode=dialogue_mode
+        )
         if use_persistent:
             print(
-                f"\n--- DRY RUN (persistent_agent) — {dry_k} stateful steps per "
-                f"error type (length={dry_len}) ---\n"
+                f"\n--- DRY RUN (persistent_agent) — {dry_n_pregen} pre-generated "
+                f"step(s) of k={dry_k} per error type (length={dry_len}) ---\n"
             )
         else:
-            print(f"\n--- DRY RUN (independent) — one prompt per error type (k={dry_k}, {dry_len}) ---\n")
+            print(
+                f"\n--- DRY RUN (independent) — one prompt per error type "
+                f"(n_pregen={dry_n_pregen} of k={dry_k}, {dry_len}) ---\n"
+            )
         target_model = target_models[0]
         baseline_contexts = (
             {}
@@ -1039,21 +1535,23 @@ def main() -> None:
             if use_persistent:
                 decoy = task.get("decoy_answer", "an incorrect value")
                 role_prompt = build_role_prompt(
-                    error_type, decoy, task.get("domain", "default")
+                    error_type, decoy, task.get("domain", "default"), task.get("eval_type")
                 )
                 print(f"AGENT ROLE (id={role_id(error_type)}):")
                 print(role_prompt)
                 print("·" * 60)
                 prior: list[str] = []
-                for i in range(dry_k):
+                for i in range(dry_n_pregen):
                     step = placeholder_step(
-                        task, error_type, dry_k, i, prior, baseline_context
+                        task, error_type, dry_k, i, prior, baseline_context,
+                        n_pregen=dry_n_pregen,
                     )
                     prior.append(step)
                     print(f"  Step {i + 1}: {step}")
             else:
                 prompt = build_prompt(
-                    task, error_type, dry_k, dry_len, baseline_context=baseline_context
+                    task, error_type, dry_n_pregen, dry_len,
+                    baseline_context=baseline_context,
                 )
                 print(prompt)
             print("─" * 60 + "\n")
@@ -1101,6 +1599,9 @@ def main() -> None:
 
             baseline_context = baseline_contexts.get(task["task_id"])
             max_tokens = MAX_TOKENS[length_level]
+            n_pregen = expected_pregenerated_steps(
+                k, pregenerate_steps=pregenerate_steps, dialogue_mode=dialogue_mode
+            )
 
             try:
                 if use_persistent:
@@ -1113,12 +1614,14 @@ def main() -> None:
                         return parse_single_step(raw)
 
                     steps, role_prompt = generate_persistent_steps(
-                        task, error_type, k, length_level, baseline_context, _step_gen
+                        task, error_type, k, length_level, baseline_context, _step_gen,
+                        num_steps=n_pregen,
                     )
-                    if any(not s for s in steps) or len(steps) != k:
+                    if any(not s for s in steps) or len(steps) != n_pregen:
                         print(
                             f"  [WARN] Persistent generation returned {len(steps)} "
-                            f"non-empty steps for {key} — skipped (will retry on resume)"
+                            f"non-empty steps (expected {n_pregen}) for {key} — "
+                            f"skipped (will retry on resume)"
                         )
                         failed += 1
                         continue
@@ -1126,14 +1629,15 @@ def main() -> None:
                     agent_role_id_value = role_id(error_type)
                 else:
                     prompt = build_prompt(
-                        task, error_type, k, length_level, baseline_context=baseline_context
+                        task, error_type, n_pregen, length_level,
+                        baseline_context=baseline_context,
                     )
                     raw = call_llm(prompt, provider, args.model, max_tokens, temperature)
-                    steps = parse_steps(raw, k)
-                    if steps is None or any(not s for s in steps) or len(steps) != k:
+                    steps = parse_steps(raw, n_pregen)
+                    if steps is None or any(not s for s in steps) or len(steps) != n_pregen:
                         preview = raw[:100] if steps is None else repr(steps)
                         print(
-                            f"  [WARN] Could not parse {k} valid steps for {key}. "
+                            f"  [WARN] Could not parse {n_pregen} valid steps for {key}. "
                             f"Raw/parsed: {preview!r} — skipped (will retry on resume)"
                         )
                         failed += 1
@@ -1157,6 +1661,8 @@ def main() -> None:
                     "decoy_used": str(task.get("decoy_answer", ""))
                     if error_type != "paraphrased_shift"
                     else "",
+                    "pregenerated_step_count": n_pregen,
+                    "step1_only": n_pregen < k,
                     **injection_metadata(baseline_context),
                 }
                 append_record(args.output, record)
@@ -1166,7 +1672,8 @@ def main() -> None:
 
                 print(
                     f"[{model_done:4d}/{model_remaining}] {target_model.split('/')[-1][:24]:24s} | "
-                    f"{task['task_id']:20s} | {error_type:20s} | k={k} {length_level:5s} | ok"
+                    f"{task['task_id']:20s} | {error_type:20s} | k={k} {length_level:5s} | "
+                    f"pregen={n_pregen} | ok"
                 )
 
             except Exception as exc:

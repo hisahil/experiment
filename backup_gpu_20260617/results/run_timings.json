@@ -1,0 +1,48 @@
+{
+  "timestamp_start": "2026-06-16T17:41:39.370652+00:00",
+  "script": "run_gpu_full.py",
+  "scope": "pilot_gpu_full_factorial",
+  "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+  "balanced_per_domain": 5,
+  "budget_hours": 0.0,
+  "baseline_candidate_limits": {
+    "math": 10,
+    "science": 15,
+    "logic": 24
+  },
+  "script1_elapsed_s": 8106.9,
+  "script1_tasks_processed": 49,
+  "task_selection": {
+    "verified_by_domain": {
+      "logic": 19,
+      "math": 9,
+      "science": 9
+    },
+    "selected_by_domain": {
+      "logic": 5,
+      "math": 5,
+      "science": 5
+    }
+  },
+  "selected_task_ids": [
+    "justlogic_1552",
+    "justlogic_3347",
+    "justlogic_4043",
+    "kk_p3_12",
+    "kk_p5_24",
+    "math500_test_algebra_2391.json",
+    "math500_test_algebra_2427.json",
+    "math500_test_counting_and_probability_1003.json",
+    "math500_test_geometry_538.json",
+    "math500_test_number_theory_483.json",
+    "scibench_diff_307",
+    "scibench_fund_366",
+    "scibench_fund_412",
+    "scibench_stat_538",
+    "scibench_thermo_649"
+  ],
+  "script2_elapsed_s": 7772.6,
+  "script2_tasks_processed": 15,
+  "preflight_passed": false,
+  "total_elapsed_s": 15919.0
+}

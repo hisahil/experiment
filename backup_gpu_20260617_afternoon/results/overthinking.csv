@@ -1,0 +1,5 @@
+recovery_terminated_by,n,n_gradable,fraction_of_recovery,accuracy,tokens_mean
+extraction_failed,28,28,0.0323,0.1786,2440.79
+natural,836,836,0.9631,0.6471,1725.51
+token_limit,4,4,0.0046,0.25,8192.0
+ALL,868,868,1.0,0.6302,1778.38

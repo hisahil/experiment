@@ -1,7 +1,7 @@
 # Task pool preparation — builds data/experiment_tasks.jsonl
 # Run: python scripts/prepare_tasks.py --config configs/datasets.yaml
 #
-# Active domains: math (MATH-500), science (SciBench), logic (Knights-and-Knaves).
+# Active domains: math (MATH-500), science (SciBench), logic (K&K + JustLogic).
 # GPU pilot pool (math + science + logic):
 #   python scripts/prepare_tasks.py --config configs/datasets.yaml \
 #     --output data/experiment_tasks_pilot_gpu.jsonl
@@ -18,8 +18,24 @@ domains:
     dataset: math500
     hf_path: HuggingFaceH4/MATH-500
     split: test
-    max_examples: 80
-    levels: [4, 5]
+    # Stratified intersection task-selection (von Recum et al., ICLR 2026):
+    # sample per_level tasks from EACH difficulty level so the candidate pool is
+    # balanced across difficulty. per_level may be an int (uniform) or a dict
+    # mapping level -> count; "all" means take the ENTIRE pool for that level.
+    #
+    # Risk-level oversampling: L4/L5 are the bottleneck (7B verifies fewest, and
+    # the intersection shrinks the smallest base). We oversample L4 and take the
+    # FULL L5 pool up front so the hard-level yield is maximised in one pass
+    # (no iterative backfill). Total candidates = 40+40+40+50+134 = 304.
+    stratified: true
+    per_level:
+      1: 40    # pool only 43 -> near-max already
+      2: 40
+      3: 40
+      4: 50    # oversample (pool 128)
+      5: all   # ENTIRE L5 pool (134) -> max possible hard-level yield
+    max_examples: 304   # sanity floor on the eligible pool
+    levels: [1, 2, 3, 4, 5]
   # Science: SciBench — college physics/chemistry/math, open-ended numeric answers.
   # Graded by numeric tolerance (relative ~1e-4).
   science:
@@ -28,12 +44,22 @@ domains:
     config: default
     split: train
     max_examples: 80
-  # Logic (optional): Knights-and-Knaves. Set enabled: false to drop from the pool.
-  # Graded by exact match on the role tuple (logic eval_type).
+  # Logic (optional): K&K + JustLogic coexist under domain=logic.
+  # Equal max_examples per source → 50/50 pool; each source balanced over 3 tiers.
   logic:
     enabled: true
-    dataset: knights_knaves
-    hf_path: K-and-K/knights-and-knaves
-    split: test
-    n_people: [3, 4, 5]
-    max_examples: 24
+    knights_knaves:
+      enabled: true
+      hf_path: K-and-K/knights-and-knaves
+      split: test
+      n_people: [3, 4, 5]
+      max_examples: 12
+    justlogic:
+      enabled: true
+      hf_path: michaelchenkj/JustLogic
+      data_file: validate_dataset.csv
+      tiers:
+        low: [1, 2]
+        mid: [3, 4]
+        high: [5, 6, 7]
+      max_examples: 12

@@ -77,6 +77,38 @@ class MathExtractionTests(unittest.TestCase):
         extracted = _extract_math_answer(text)
         self.assertNotEqual(extracted, "12")
 
+    def test_l1_boxed_inside_think_block_truncated_after(self):
+        # Stop prefill landed inside <think>; post-</think> presentation truncated.
+        text = (
+            "Step 1 ... Step 2 ...\n"
+            "Therefore, the final answer is \\boxed{28800}.\n\n"
+            "</think>\n\n"
+            "Let me re-derive the result more carefully but"
+        )
+        self.assertEqual(_extract_math_answer(text), "28800")
+
+    def test_l1_no_boxed_anywhere_stays_none(self):
+        text = "</think>\n\nLet me try again from the start without finishing"
+        self.assertIsNone(_extract_math_answer(text))
+
+    def test_l2_prose_coordinate_tuple(self):
+        text = "After substituting back, the coordinates of point P are (8, -2)."
+        self.assertEqual(_extract_math_answer(text), "(8,-2)")
+        self.assertTrue(is_correct(_extract_math_answer(text), "(8,-2)", "symbolic"))
+
+    def test_l2_prose_trailing_percent(self):
+        text = "Hence the minimal compound interest rate required is 10%"
+        self.assertEqual(_extract_math_answer(text), "10")
+
+    def test_l2_prose_ignores_intermediate_lines(self):
+        # A number mid-sentence (not after a conclusion cue at line end) must not
+        # be picked by the prose fallback; the conclusion itself has no answer.
+        text = (
+            "We had 50 candidates at the very beginning of this long search\n"
+            "Now let us reconsider the whole approach again and"
+        )
+        self.assertIsNone(_extract_math_answer(text))
+
 
 if __name__ == "__main__":
     unittest.main()

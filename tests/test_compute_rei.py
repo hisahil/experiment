@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from evaluate import compute_rei  # noqa: E402
+from evaluate import classify_recovery_pair, compute_rei  # noqa: E402
 
 
 class ComputeReiTests(unittest.TestCase):
@@ -30,6 +30,49 @@ class ComputeReiTests(unittest.TestCase):
 
     def test_delta_nine_excluded_with_min_ten_regression(self):
         self.assertIsNone(compute_rei(1.0, 0.0, 109.0, 100.0, min_denominator_tokens=10))
+
+
+class ClassifyRecoveryPairTests(unittest.TestCase):
+    def test_recovered_when_rec_correct_stop_wrong(self):
+        self.assertEqual(
+            classify_recovery_pair(
+                rec_correct=True, stop_correct=False, rec_extracted="10", stop_extracted="5"
+            ),
+            "RECOVERED",
+        )
+
+    def test_persisted_when_rec_wrong_and_same_as_stop(self):
+        self.assertEqual(
+            classify_recovery_pair(
+                rec_correct=False, stop_correct=False, rec_extracted="5", stop_extracted="5"
+            ),
+            "PERSISTED",
+        )
+
+    def test_persisted_when_both_none(self):
+        self.assertEqual(
+            classify_recovery_pair(
+                rec_correct=False, stop_correct=False, rec_extracted=None, stop_extracted=None
+            ),
+            "PERSISTED",
+        )
+
+    def test_migrated_when_rec_wrong_but_different_answer(self):
+        self.assertEqual(
+            classify_recovery_pair(
+                rec_correct=False, stop_correct=False, rec_extracted="7", stop_extracted="5"
+            ),
+            "MIGRATED",
+        )
+
+    def test_migrated_when_never_damaged(self):
+        # Both correct: not RECOVERED (stop not wrong), not PERSISTED (rec correct).
+        self.assertEqual(
+            classify_recovery_pair(
+                rec_correct=True, stop_correct=True, rec_extracted="10", stop_extracted="10"
+            ),
+            "MIGRATED",
+        )
 
 
 if __name__ == "__main__":

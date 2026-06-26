@@ -1,0 +1,19 @@
+GPU backup snapshot — 2026-06-16 (run in progress)
+
+Pod: 020gpg3omasfwu @ ssh.runpod.io
+Project: /root/msc_thesis_experiment
+tmux session: gpu_run (detach with Ctrl+b d, reattach: tmux attach -t gpu_run)
+
+This folder contains initial logs from run start. Generated data/ and results/
+were not yet present at backup time (vLLM model loading / Script 1 starting).
+
+Re-backup when run finishes (rsync fails on RunPod SSH — use SSH + tar):
+
+  ssh -tt -i ~/.ssh/deploygpu_ed25519 020gpg3omasfwu-64410d4f@ssh.runpod.io
+  cd /root/msc_thesis_experiment
+  tar czf /tmp/final_backup.tar.gz data results /root/gpu_run.log
+  # then pull via base64 or RunPod file browser
+
+Monitor:
+  tail -f /root/gpu_run.log
+  wc -l data/baseline_cots_samples.jsonl

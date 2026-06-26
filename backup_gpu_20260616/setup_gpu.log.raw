@@ -1,0 +1,115 @@
+cat /root/setup_gpu.log 2>/dev/null || echo NO_SETUP_LOG
+exit
+
+-- RUNPOD.IO --
+Enjoy your Pod #020gpg3omasfwu ^_^
+
+cat /root/setup_gpu.log 2>/dev/null || echo NO_SETUP_LOG
+exit
+cat /root/setup_gpu.log 2>/dev/null || echo NO_SETUP_LOG
+exit
+ ______                 ______            _
+(_____ \               (_____ \          | |
+ _____) ) _   _  ____   _____) )___    __| |
+|  __  / | | | ||  _ \ |  ____// _ \  / _  |
+| |  \ \ | |_| || | | || |    | |_| |( (_| |
+|_|   |_||____/ |_| |_||_|     \___/  \____|
+
+For detailed documentation and guides, please visit:
+[1;34mhttps://docs.runpod.io/[0m and [1;34mhttps://blog.runpod.io/[0m
+
+
+[?2004h]0;root@46b8d724b5cd: /root@46b8d724b5cd:/# cat /root/setup_gpu.log 2>/dev/null || echo NO_SETUP_LOG
+[?2004l==> Working directory: /root/msc_thesis_experiment
+==> GPU status:
+Tue Jun 16 15:04:59 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.04             Driver Version: 580.159.04     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-80GB          On  |   00000000:0F:00.0 Off |                    0 |
+| N/A   23C    P0             65W /  400W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+==> Creating fresh virtual environment...
+==> Upgrading pip...
+==> Installing PyTorch 2.5.1 (cu121)...
+==> Verifying CUDA...
+  torch 2.5.1+cu121
+  CUDA  12.1
+  GPU   NVIDIA A100-SXM4-80GB
+  VRAM  84.6 GB free / 85.1 GB total
+==> Installing vLLM 0.6.6 + pinned deps...
+==> Verifying vLLM import...
+  vLLM import OK
+==> Installing remaining dependencies...
+
+NOTE: DeepSeek-R1-Distill-Qwen-32B is public — no token required.
+If you hit a rate-limit error, set: export HF_TOKEN=your_token_here
+
+============================================================
+Setup complete. Next: GPU pipeline (Scripts 0–4)
+
+  Recommended — one command (stages 0–4 + grid validation):
+     python scripts/run_pipeline.py --scope pilot_gpu --dry-run
+     python scripts/run_pipeline.py --scope pilot_gpu
+     python scripts/validate_grid.py --scope pilot_gpu --kind all
+
+  Manual stages (fallback):
+
+  0. (Pilot only) Pin the exact task subset for Script 1:
+     python scripts/select_pilot_tasks.py \
+       --scope pilot_gpu \
+       --tasks data/experiment_tasks_pilot_gpu.jsonl \
+       --output data/pilot_gpu_tasks.jsonl
+
+  1. Build task pool (if not done yet):
+     python scripts/prepare_tasks.py --config configs/datasets.yaml \
+       --output data/experiment_tasks_pilot_gpu.jsonl
+
+  2. Generate baselines (Script 1):
+     python scripts/generate_baselines.py \
+       --tasks data/pilot_gpu_tasks.jsonl    # pilot
+     # full run: omit --tasks or point at data/experiment_tasks.jsonl
+
+  3. Generate injections (Script 2) — must cover the scope design:
+     python scripts/generate_injections.py --baselines data/baseline_cots.jsonl
+     # pilot_gpu needs k=1,3 × short; add k=5 × long before techcheck scope
+     # Re-run Script 2 if Script 1 baselines change (avoid insertion_step mismatch).
+
+  3. Local preflight (Mac, before deploy):
+     python scripts/preflight_gpu.py
+
+  4. Transfer to GPU:
+     GPU_HOST=user@IP bash scripts/transfer_to_gpu.sh.example
+
+  5. Manual 1-task check (dry-run, no GPU cost for preflight logic):
+     python scripts/run_perturbed.py --dry-run --scope pilot_gpu --domain math --limit 1
+
+  5. Script 3 (GPU) — preflight runs before inference:
+     python scripts/run_perturbed.py --scope pilot_gpu --domain math --limit 1
+     python scripts/run_perturbed.py --scope pilot_gpu
+     python scripts/run_perturbed.py --scope pilot_gpu_techcheck
+     # full: python scripts/run_perturbed.py --scope full
+     # Aborts if injections are missing/invalid for the selected scope.
+     # insertion_step mismatch → WARN (re-run Script 2); use --strict-insertion-step to abort.
+     # Debug partial runs only: --skip-injection-preflight
+
+  6. Evaluation (Script 4):
+     python scripts/evaluate.py
+============================================================
+SETUP_EXIT=0
+[?2004h]0;root@46b8d724b5cd: /root@46b8d724b5cd:/# [Kexit
+[?2004lexit
+Connection to 100.65.13.79 closed.

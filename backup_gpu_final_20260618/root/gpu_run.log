@@ -1,0 +1,836 @@
+Judge smoke test: model=claude-sonnet-4-6
+  judge_fallback=False
+  judge_output='Correct'
+  judge_raw_output='Correct'
+  correct=True
+OK: judge API reachable and parsed Correct
+INFO 06-16 17:42:29 config.py:510] This model supports multiple tasks: {'score', 'reward', 'generate', 'embed', 'classify'}. Defaulting to 'generate'.
+INFO 06-16 17:42:29 llm_engine.py:234] Initializing an LLM engine (v0.6.6) with config: model='deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', speculative_config=None, tokenizer='deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=16384, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=deepseek-ai/DeepSeek-R1-Distill-Qwen-32B, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=True, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output"],"candidate_compile_sizes":[],"compile_sizes":[],"capture_sizes":[256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"max_capture_size":256}, use_cached_outputs=False, 
+INFO 06-16 17:42:31 selector.py:120] Using Flash Attention backend.
+INFO 06-16 17:42:33 model_runner.py:1094] Starting to load model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B...
+INFO 06-16 17:42:34 weight_utils.py:251] Using model weights format ['*.safetensors']
+Loading safetensors checkpoint shards:   0% Completed | 0/8 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  12% Completed | 1/8 [00:00<00:03,  2.29it/s]
+Loading safetensors checkpoint shards:  25% Completed | 2/8 [00:01<00:04,  1.24it/s]
+Loading safetensors checkpoint shards:  38% Completed | 3/8 [00:02<00:05,  1.01s/it]
+Loading safetensors checkpoint shards:  50% Completed | 4/8 [00:04<00:04,  1.11s/it]
+Loading safetensors checkpoint shards:  62% Completed | 5/8 [00:05<00:03,  1.17s/it]
+Loading safetensors checkpoint shards:  75% Completed | 6/8 [00:06<00:02,  1.20s/it]
+Loading safetensors checkpoint shards:  88% Completed | 7/8 [00:07<00:01,  1.21s/it]
+Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:09<00:00,  1.23s/it]
+Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:09<00:00,  1.13s/it]
+
+INFO 06-16 17:42:43 model_runner.py:1099] Loading model weights took 61.0607 GB
+INFO 06-16 17:42:48 worker.py:241] Memory profiling takes 4.38 seconds
+INFO 06-16 17:42:48 worker.py:241] the current vLLM instance can use total_gpu_memory (79.25GiB) x gpu_memory_utilization (0.92) = 72.91GiB
+INFO 06-16 17:42:48 worker.py:241] model weights take 61.06GiB; non_torch_memory takes 0.10GiB; PyTorch activation peak memory takes 3.16GiB; the rest of the memory reserved for KV Cache is 8.59GiB.
+INFO 06-16 17:42:48 gpu_executor.py:76] # GPU blocks: 2197, # CPU blocks: 1024
+INFO 06-16 17:42:48 gpu_executor.py:80] Maximum concurrency for 16384 tokens per request: 2.15x
+INFO 06-16 17:42:55 model_runner.py:1415] Capturing cudagraphs for decoding. This may lead to unexpected consequences if the model is not static. To run the model in eager mode, set 'enforce_eager=True' or use '--enforce-eager' in the CLI. If out-of-memory error occurs during cudagraph capture, consider decreasing `gpu_memory_utilization` or switching to eager mode. You can also reduce the `max_num_seqs` as needed to decrease memory usage.
+Capturing CUDA graph shapes:   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graph shapes:   3%|▎         | 1/35 [00:00<00:22,  1.51it/s]Capturing CUDA graph shapes:   6%|▌         | 2/35 [00:01<00:19,  1.73it/s]Capturing CUDA graph shapes:   9%|▊         | 3/35 [00:01<00:18,  1.78it/s]Capturing CUDA graph shapes:  11%|█▏        | 4/35 [00:02<00:17,  1.78it/s]Capturing CUDA graph shapes:  14%|█▍        | 5/35 [00:02<00:16,  1.79it/s]Capturing CUDA graph shapes:  17%|█▋        | 6/35 [00:03<00:15,  1.84it/s]Capturing CUDA graph shapes:  20%|██        | 7/35 [00:03<00:15,  1.83it/s]Capturing CUDA graph shapes:  23%|██▎       | 8/35 [00:04<00:14,  1.85it/s]Capturing CUDA graph shapes:  26%|██▌       | 9/35 [00:04<00:13,  1.90it/s]Capturing CUDA graph shapes:  29%|██▊       | 10/35 [00:05<00:13,  1.90it/s]Capturing CUDA graph shapes:  31%|███▏      | 11/35 [00:05<00:12,  1.92it/s]Capturing CUDA graph shapes:  34%|███▍      | 12/35 [00:06<00:12,  1.91it/s]Capturing CUDA graph shapes:  37%|███▋      | 13/35 [00:06<00:11,  1.95it/s]Capturing CUDA graph shapes:  40%|████      | 14/35 [00:07<00:10,  1.98it/s]Capturing CUDA graph shapes:  43%|████▎     | 15/35 [00:07<00:10,  1.98it/s]Capturing CUDA graph shapes:  46%|████▌     | 16/35 [00:08<00:09,  1.98it/s]Capturing CUDA graph shapes:  49%|████▊     | 17/35 [00:08<00:09,  1.99it/s]Capturing CUDA graph shapes:  51%|█████▏    | 18/35 [00:09<00:08,  2.03it/s]Capturing CUDA graph shapes:  54%|█████▍    | 19/35 [00:09<00:07,  2.00it/s]Capturing CUDA graph shapes:  57%|█████▋    | 20/35 [00:10<00:07,  2.04it/s]Capturing CUDA graph shapes:  60%|██████    | 21/35 [00:10<00:07,  2.00it/s]Capturing CUDA graph shapes:  63%|██████▎   | 22/35 [00:11<00:06,  2.03it/s]Capturing CUDA graph shapes:  66%|██████▌   | 23/35 [00:11<00:05,  2.05it/s]Capturing CUDA graph shapes:  69%|██████▊   | 24/35 [00:12<00:05,  2.05it/s]Capturing CUDA graph shapes:  71%|███████▏  | 25/35 [00:12<00:04,  2.08it/s]Capturing CUDA graph shapes:  74%|███████▍  | 26/35 [00:13<00:04,  2.11it/s]Capturing CUDA graph shapes:  77%|███████▋  | 27/35 [00:13<00:03,  2.13it/s]Capturing CUDA graph shapes:  80%|████████  | 28/35 [00:14<00:03,  2.15it/s]Capturing CUDA graph shapes:  83%|████████▎ | 29/35 [00:14<00:02,  2.11it/s]Capturing CUDA graph shapes:  86%|████████▌ | 30/35 [00:15<00:02,  2.03it/s]Capturing CUDA graph shapes:  89%|████████▊ | 31/35 [00:15<00:02,  1.95it/s]Capturing CUDA graph shapes:  91%|█████████▏| 32/35 [00:16<00:01,  1.93it/s]Capturing CUDA graph shapes:  94%|█████████▍| 33/35 [00:16<00:01,  1.89it/s]Capturing CUDA graph shapes:  97%|█████████▋| 34/35 [00:17<00:00,  1.86it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:17<00:00,  1.86it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:17<00:00,  1.95it/s]
+INFO 06-16 17:43:13 model_runner.py:1535] Graph capturing finished in 18 secs, took 0.32 GiB
+INFO 06-16 17:43:13 llm_engine.py:431] init engine (profile, create kv cache, warmup model) took 29.86 seconds
+Tasks: 10 | Models: 1 | Work items: 10
+Already verified (skipped): 0 | Remaining: 10
+Output: /root/msc_thesis_experiment/data/baseline_cots.jsonl | verification_samples=5 (majority>=3) | min_steps=3
+Sample details: /root/msc_thesis_experiment/data/baseline_cots_samples.jsonl
+Backend: vllm
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:45<00:00, 45.06s/it, est. speed input: 6.21 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:45<00:00, 45.06s/it, est. speed input: 6.21 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [09:14<00:00, 554.07s/it, est. speed input: 0.51 toks/s, output: 22.18 toks/s]Processed prompts: 100%|██████████| 1/1 [09:14<00:00, 554.07s/it, est. speed input: 0.51 toks/s, output: 22.18 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:47<00:00, 47.29s/it, est. speed input: 5.92 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:47<00:00, 47.29s/it, est. speed input: 5.92 toks/s, output: 22.80 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.92s/it, est. speed input: 12.77 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.92s/it, est. speed input: 12.77 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [01:49<00:00, 109.08s/it, est. speed input: 2.57 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [01:49<00:00, 109.08s/it, est. speed input: 2.57 toks/s, output: 22.77 toks/s]
+[OK] math500_test_counting_and_probability_1003.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=15 | seg=prompt
+    progress: 1/10 | elapsed 13m48s | avg 828s/task | ETA 2h04m13s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.08s/it, est. speed input: 10.54 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.08s/it, est. speed input: 10.54 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.38s/it, est. speed input: 12.84 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.38s/it, est. speed input: 12.84 toks/s, output: 22.77 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.86s/it, est. speed input: 11.47 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.86s/it, est. speed input: 11.47 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:03<00:00,  3.82s/it, est. speed input: 41.63 toks/s, output: 22.52 toks/s]Processed prompts: 100%|██████████| 1/1 [00:03<00:00,  3.82s/it, est. speed input: 41.63 toks/s, output: 22.52 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.48s/it, est. speed input: 7.76 toks/s, output: 22.81 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.48s/it, est. speed input: 7.76 toks/s, output: 22.81 toks/s]
+[OK] math500_test_algebra_2391.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=10 | seg=prompt
+    progress: 2/10 | elapsed 15m07s | avg 454s/task | ETA 1h00m28s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.41s/it, est. speed input: 7.95 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.41s/it, est. speed input: 7.95 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.76s/it, est. speed input: 9.82 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.76s/it, est. speed input: 9.82 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.87s/it, est. speed input: 9.30 toks/s, output: 22.81 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.87s/it, est. speed input: 9.30 toks/s, output: 22.81 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.80s/it, est. speed input: 9.33 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.80s/it, est. speed input: 9.33 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.15s/it, est. speed input: 6.44 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.15s/it, est. speed input: 6.44 toks/s, output: 22.79 toks/s]
+[OK] math500_test_geometry_538.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=13 | seg=prompt
+    progress: 3/10 | elapsed 17m09s | avg 343s/task | ETA 40m02s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [05:57<00:00, 357.17s/it, est. speed input: 0.58 toks/s, output: 22.52 toks/s]Processed prompts: 100%|██████████| 1/1 [05:57<00:00, 357.17s/it, est. speed input: 0.58 toks/s, output: 22.52 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [03:26<00:00, 206.52s/it, est. speed input: 1.00 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [03:26<00:00, 206.52s/it, est. speed input: 1.00 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:50<00:00, 50.97s/it, est. speed input: 4.06 toks/s, output: 22.82 toks/s]Processed prompts: 100%|██████████| 1/1 [00:50<00:00, 50.97s/it, est. speed input: 4.06 toks/s, output: 22.82 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:55<00:00, 55.72s/it, est. speed input: 3.72 toks/s, output: 22.83 toks/s]Processed prompts: 100%|██████████| 1/1 [00:55<00:00, 55.72s/it, est. speed input: 3.72 toks/s, output: 22.83 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [01:43<00:00, 103.56s/it, est. speed input: 2.00 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [01:43<00:00, 103.56s/it, est. speed input: 2.00 toks/s, output: 22.79 toks/s]
+[OK] math500_test_intermediate_algebra_117.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=40 | seg=prompt
+    progress: 4/10 | elapsed 30m11s | avg 453s/task | ETA 45m17s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.56s/it, est. speed input: 21.04 toks/s, output: 22.67 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.56s/it, est. speed input: 21.04 toks/s, output: 22.67 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.90s/it, est. speed input: 16.52 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.90s/it, est. speed input: 16.52 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.71s/it, est. speed input: 23.34 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.71s/it, est. speed input: 23.34 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.36s/it, est. speed input: 24.45 toks/s, output: 22.68 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.36s/it, est. speed input: 24.45 toks/s, output: 22.68 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.94s/it, est. speed input: 22.67 toks/s, output: 22.55 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.94s/it, est. speed input: 22.67 toks/s, output: 22.55 toks/s]
+[OK] math500_test_counting_and_probability_159.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=5 | seg=prompt
+    progress: 5/10 | elapsed 31m00s | avg 372s/task | ETA 31m00s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.94s/it, est. speed input: 14.09 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.94s/it, est. speed input: 14.09 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.19s/it, est. speed input: 15.37 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.19s/it, est. speed input: 15.37 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.55s/it, est. speed input: 21.76 toks/s, output: 22.65 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.55s/it, est. speed input: 21.76 toks/s, output: 22.65 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.36s/it, est. speed input: 19.21 toks/s, output: 22.66 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.36s/it, est. speed input: 19.21 toks/s, output: 22.66 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.63s/it, est. speed input: 21.65 toks/s, output: 22.67 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.63s/it, est. speed input: 21.65 toks/s, output: 22.67 toks/s]
+[OK] math500_test_prealgebra_1512.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=7 | seg=prompt
+    progress: 6/10 | elapsed 32m29s | avg 325s/task | ETA 21m39s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.59s/it, est. speed input: 19.18 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.59s/it, est. speed input: 19.18 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.66s/it, est. speed input: 10.42 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.66s/it, est. speed input: 10.42 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.11s/it, est. speed input: 22.69 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.11s/it, est. speed input: 22.69 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.96s/it, est. speed input: 14.20 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.96s/it, est. speed input: 14.20 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.71s/it, est. speed input: 12.51 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.71s/it, est. speed input: 12.51 toks/s, output: 22.78 toks/s]
+[OK] math500_test_number_theory_483.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=5 | seg=prompt
+    progress: 7/10 | elapsed 33m40s | avg 289s/task | ETA 14m25s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:56<00:00, 56.47s/it, est. speed input: 3.17 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:56<00:00, 56.47s/it, est. speed input: 3.17 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:41<00:00, 41.31s/it, est. speed input: 4.33 toks/s, output: 22.83 toks/s]Processed prompts: 100%|██████████| 1/1 [00:41<00:00, 41.31s/it, est. speed input: 4.33 toks/s, output: 22.83 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [01:09<00:00, 69.51s/it, est. speed input: 2.58 toks/s, output: 22.82 toks/s]Processed prompts: 100%|██████████| 1/1 [01:09<00:00, 69.51s/it, est. speed input: 2.58 toks/s, output: 22.82 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.07s/it, est. speed input: 5.95 toks/s, output: 22.82 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.07s/it, est. speed input: 5.95 toks/s, output: 22.82 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:49<00:00, 49.41s/it, est. speed input: 3.62 toks/s, output: 22.83 toks/s]Processed prompts: 100%|██████████| 1/1 [00:49<00:00, 49.41s/it, est. speed input: 3.62 toks/s, output: 22.83 toks/s]
+[OK] math500_test_intermediate_algebra_1508.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=12 | seg=prompt
+    progress: 8/10 | elapsed 37m53s | avg 284s/task | ETA 9m28s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.91s/it, est. speed input: 14.02 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.91s/it, est. speed input: 14.02 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.64s/it, est. speed input: 9.05 toks/s, output: 22.81 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.64s/it, est. speed input: 9.05 toks/s, output: 22.81 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.07s/it, est. speed input: 13.07 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.07s/it, est. speed input: 13.07 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.92s/it, est. speed input: 10.17 toks/s, output: 22.81 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.92s/it, est. speed input: 10.17 toks/s, output: 22.81 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.22s/it, est. speed input: 14.65 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.22s/it, est. speed input: 14.65 toks/s, output: 22.73 toks/s]
+[OK] math500_test_algebra_2427.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=8 | seg=prompt
+    progress: 9/10 | elapsed 39m36s | avg 264s/task | ETA 4m24s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:50<00:00, 50.29s/it, est. speed input: 3.42 toks/s, output: 22.83 toks/s]Processed prompts: 100%|██████████| 1/1 [00:50<00:00, 50.29s/it, est. speed input: 3.42 toks/s, output: 22.83 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.55s/it, est. speed input: 9.27 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.55s/it, est. speed input: 9.27 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.52s/it, est. speed input: 6.74 toks/s, output: 22.81 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.52s/it, est. speed input: 6.74 toks/s, output: 22.81 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [06:14<00:00, 374.63s/it, est. speed input: 0.46 toks/s, output: 22.49 toks/s]Processed prompts: 100%|██████████| 1/1 [06:14<00:00, 374.63s/it, est. speed input: 0.46 toks/s, output: 22.49 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.38s/it, est. speed input: 5.48 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.38s/it, est. speed input: 5.48 toks/s, output: 22.78 toks/s]
+[FAIL] math500_test_precalculus_989.json | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=9 | seg=prompt | exclude_reason=below_majority
+    progress: 10/10 | elapsed 48m03s | avg 288s/task | ETA 0s
+
+Done. Processed: 10 | Verified: 9 | Excluded: 1
+Segmentation methods (chosen baselines): prompt=10
+Segmentation methods (verified): prompt=9
+Segmentation methods (excluded): prompt=1
+Verified step_count distribution: 10=1, 12=1, 13=1, 15=1, 40=1, 5=2, 7=1, 8=1
+Excluded by reason: below_majority=1
+Thesis note: 1 task(s) excluded — majority of 5 samples not correct (>= 3) or chosen baseline too short
+Output: /root/msc_thesis_experiment/data/baseline_cots.jsonl
+Sample details: /root/msc_thesis_experiment/data/baseline_cots_samples.jsonl
+Post-run checks:
+  jq -r 'select(.verified==true) | .segmentation_method' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort | uniq -c
+  jq -r 'select(.verified==false) | .exclude_reason' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort | uniq -c
+  jq -r 'select(.verified==true) | .step_count' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort -n | uniq -c
+[rank0]:[W616 18:31:18.225955160 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+INFO 06-16 18:31:32 config.py:510] This model supports multiple tasks: {'embed', 'classify', 'reward', 'generate', 'score'}. Defaulting to 'generate'.
+INFO 06-16 18:31:32 llm_engine.py:234] Initializing an LLM engine (v0.6.6) with config: model='deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', speculative_config=None, tokenizer='deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=16384, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=deepseek-ai/DeepSeek-R1-Distill-Qwen-32B, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=True, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output"],"candidate_compile_sizes":[],"compile_sizes":[],"capture_sizes":[256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"max_capture_size":256}, use_cached_outputs=False, 
+INFO 06-16 18:31:33 selector.py:120] Using Flash Attention backend.
+INFO 06-16 18:31:35 model_runner.py:1094] Starting to load model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B...
+INFO 06-16 18:31:35 weight_utils.py:251] Using model weights format ['*.safetensors']
+Loading safetensors checkpoint shards:   0% Completed | 0/8 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  12% Completed | 1/8 [00:00<00:03,  2.32it/s]
+Loading safetensors checkpoint shards:  25% Completed | 2/8 [00:01<00:04,  1.24it/s]
+Loading safetensors checkpoint shards:  38% Completed | 3/8 [00:02<00:05,  1.02s/it]
+Loading safetensors checkpoint shards:  50% Completed | 4/8 [00:04<00:04,  1.11s/it]
+Loading safetensors checkpoint shards:  62% Completed | 5/8 [00:05<00:03,  1.17s/it]
+Loading safetensors checkpoint shards:  75% Completed | 6/8 [00:06<00:02,  1.20s/it]
+Loading safetensors checkpoint shards:  88% Completed | 7/8 [00:07<00:01,  1.22s/it]
+Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:09<00:00,  1.23s/it]
+Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:09<00:00,  1.13s/it]
+
+INFO 06-16 18:31:45 model_runner.py:1099] Loading model weights took 61.0607 GB
+INFO 06-16 18:31:50 worker.py:241] Memory profiling takes 4.40 seconds
+INFO 06-16 18:31:50 worker.py:241] the current vLLM instance can use total_gpu_memory (79.25GiB) x gpu_memory_utilization (0.92) = 72.91GiB
+INFO 06-16 18:31:50 worker.py:241] model weights take 61.06GiB; non_torch_memory takes 0.10GiB; PyTorch activation peak memory takes 3.16GiB; the rest of the memory reserved for KV Cache is 8.59GiB.
+INFO 06-16 18:31:50 gpu_executor.py:76] # GPU blocks: 2197, # CPU blocks: 1024
+INFO 06-16 18:31:50 gpu_executor.py:80] Maximum concurrency for 16384 tokens per request: 2.15x
+INFO 06-16 18:31:57 model_runner.py:1415] Capturing cudagraphs for decoding. This may lead to unexpected consequences if the model is not static. To run the model in eager mode, set 'enforce_eager=True' or use '--enforce-eager' in the CLI. If out-of-memory error occurs during cudagraph capture, consider decreasing `gpu_memory_utilization` or switching to eager mode. You can also reduce the `max_num_seqs` as needed to decrease memory usage.
+Capturing CUDA graph shapes:   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graph shapes:   3%|▎         | 1/35 [00:00<00:20,  1.68it/s]Capturing CUDA graph shapes:   6%|▌         | 2/35 [00:01<00:18,  1.79it/s]Capturing CUDA graph shapes:   9%|▊         | 3/35 [00:01<00:17,  1.83it/s]Capturing CUDA graph shapes:  11%|█▏        | 4/35 [00:02<00:16,  1.84it/s]Capturing CUDA graph shapes:  14%|█▍        | 5/35 [00:02<00:16,  1.86it/s]Capturing CUDA graph shapes:  17%|█▋        | 6/35 [00:03<00:15,  1.87it/s]Capturing CUDA graph shapes:  20%|██        | 7/35 [00:03<00:15,  1.85it/s]Capturing CUDA graph shapes:  23%|██▎       | 8/35 [00:04<00:14,  1.85it/s]Capturing CUDA graph shapes:  26%|██▌       | 9/35 [00:04<00:13,  1.86it/s]Capturing CUDA graph shapes:  29%|██▊       | 10/35 [00:05<00:13,  1.87it/s]Capturing CUDA graph shapes:  31%|███▏      | 11/35 [00:05<00:12,  1.86it/s]Capturing CUDA graph shapes:  34%|███▍      | 12/35 [00:06<00:12,  1.89it/s]Capturing CUDA graph shapes:  37%|███▋      | 13/35 [00:07<00:11,  1.87it/s]Capturing CUDA graph shapes:  40%|████      | 14/35 [00:07<00:11,  1.90it/s]Capturing CUDA graph shapes:  43%|████▎     | 15/35 [00:08<00:10,  1.92it/s]Capturing CUDA graph shapes:  46%|████▌     | 16/35 [00:08<00:09,  1.92it/s]Capturing CUDA graph shapes:  49%|████▊     | 17/35 [00:09<00:09,  1.96it/s]Capturing CUDA graph shapes:  51%|█████▏    | 18/35 [00:09<00:08,  2.00it/s]Capturing CUDA graph shapes:  54%|█████▍    | 19/35 [00:10<00:07,  2.00it/s]Capturing CUDA graph shapes:  57%|█████▋    | 20/35 [00:10<00:07,  2.03it/s]Capturing CUDA graph shapes:  60%|██████    | 21/35 [00:10<00:06,  2.05it/s]Capturing CUDA graph shapes:  63%|██████▎   | 22/35 [00:11<00:06,  2.05it/s]Capturing CUDA graph shapes:  66%|██████▌   | 23/35 [00:11<00:05,  2.08it/s]Capturing CUDA graph shapes:  69%|██████▊   | 24/35 [00:12<00:05,  2.04it/s]Capturing CUDA graph shapes:  71%|███████▏  | 25/35 [00:12<00:04,  2.08it/s]Capturing CUDA graph shapes:  74%|███████▍  | 26/35 [00:13<00:04,  2.10it/s]Capturing CUDA graph shapes:  77%|███████▋  | 27/35 [00:13<00:03,  2.09it/s]Capturing CUDA graph shapes:  80%|████████  | 28/35 [00:14<00:03,  2.11it/s]Capturing CUDA graph shapes:  83%|████████▎ | 29/35 [00:14<00:02,  2.11it/s]Capturing CUDA graph shapes:  86%|████████▌ | 30/35 [00:15<00:02,  2.10it/s]Capturing CUDA graph shapes:  89%|████████▊ | 31/35 [00:15<00:01,  2.12it/s]Capturing CUDA graph shapes:  91%|█████████▏| 32/35 [00:16<00:01,  2.07it/s]Capturing CUDA graph shapes:  94%|█████████▍| 33/35 [00:16<00:01,  1.96it/s]Capturing CUDA graph shapes:  97%|█████████▋| 34/35 [00:17<00:00,  1.93it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:17<00:00,  1.93it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:17<00:00,  1.96it/s]
+INFO 06-16 18:32:15 model_runner.py:1535] Graph capturing finished in 18 secs, took 0.32 GiB
+INFO 06-16 18:32:15 llm_engine.py:431] init engine (profile, create kv cache, warmup model) took 29.78 seconds
+Tasks: 15 | Models: 1 | Work items: 15
+Already verified (skipped): 0 | Remaining: 15
+Output: /root/msc_thesis_experiment/data/baseline_cots.jsonl | verification_samples=5 (majority>=3) | min_steps=3
+Sample details: /root/msc_thesis_experiment/data/baseline_cots_samples.jsonl
+Backend: vllm
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.88s/it, est. speed input: 15.60 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.88s/it, est. speed input: 15.60 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.09s/it, est. speed input: 10.05 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.09s/it, est. speed input: 10.05 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.12s/it, est. speed input: 19.14 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.12s/it, est. speed input: 19.14 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [09:14<00:00, 554.16s/it, est. speed input: 0.42 toks/s, output: 22.17 toks/s]Processed prompts: 100%|██████████| 1/1 [09:14<00:00, 554.16s/it, est. speed input: 0.42 toks/s, output: 22.17 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.76s/it, est. speed input: 13.84 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.76s/it, est. speed input: 13.84 toks/s, output: 22.73 toks/s]
+[FAIL] scibench_atkins_8    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.00 (0/5) | steps=3 | seg=prompt | exclude_reason=below_majority
+    progress: 1/15 | elapsed 10m27s | avg 628s/task | ETA 2h26m31s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.71s/it, est. speed input: 19.51 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.71s/it, est. speed input: 19.51 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.95s/it, est. speed input: 11.98 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.95s/it, est. speed input: 11.98 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.54s/it, est. speed input: 9.40 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.54s/it, est. speed input: 9.40 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.38s/it, est. speed input: 12.83 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.38s/it, est. speed input: 12.83 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.49s/it, est. speed input: 16.41 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.49s/it, est. speed input: 16.41 toks/s, output: 22.69 toks/s]
+[OK] scibench_fund_412    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=3 | seg=prompt
+    progress: 2/15 | elapsed 12m25s | avg 373s/task | ETA 1h20m46s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.14s/it, est. speed input: 11.37 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.14s/it, est. speed input: 11.37 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.00s/it, est. speed input: 9.54 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.00s/it, est. speed input: 9.54 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.04s/it, est. speed input: 8.47 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.04s/it, est. speed input: 8.47 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:52<00:00, 52.74s/it, est. speed input: 4.34 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:52<00:00, 52.74s/it, est. speed input: 4.34 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.34s/it, est. speed input: 7.31 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.34s/it, est. speed input: 7.31 toks/s, output: 22.78 toks/s]
+[FAIL] scibench_class_264   | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.20 (1/5) | steps=6 | seg=prompt | exclude_reason=below_majority
+    progress: 3/15 | elapsed 15m11s | avg 304s/task | ETA 1h00m46s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.40s/it, est. speed input: 33.08 toks/s, output: 22.49 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.40s/it, est. speed input: 33.08 toks/s, output: 22.49 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.17s/it, est. speed input: 30.32 toks/s, output: 22.58 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.17s/it, est. speed input: 30.32 toks/s, output: 22.58 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.64s/it, est. speed input: 36.41 toks/s, output: 22.53 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.64s/it, est. speed input: 36.41 toks/s, output: 22.53 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.37s/it, est. speed input: 26.80 toks/s, output: 22.56 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.37s/it, est. speed input: 26.80 toks/s, output: 22.56 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:04<00:00,  4.39s/it, est. speed input: 63.35 toks/s, output: 22.10 toks/s]Processed prompts: 100%|██████████| 1/1 [00:04<00:00,  4.39s/it, est. speed input: 63.35 toks/s, output: 22.10 toks/s]
+[FAIL] scibench_stat_531    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=3 | seg=prompt | exclude_reason=below_majority
+    progress: 4/15 | elapsed 16m01s | avg 240s/task | ETA 44m03s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.39s/it, est. speed input: 6.53 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.39s/it, est. speed input: 6.53 toks/s, output: 22.80 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.14s/it, est. speed input: 8.51 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.14s/it, est. speed input: 8.51 toks/s, output: 22.77 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.13s/it, est. speed input: 7.93 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.13s/it, est. speed input: 7.93 toks/s, output: 22.80 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.07s/it, est. speed input: 10.96 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.07s/it, est. speed input: 10.96 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.64s/it, est. speed input: 7.30 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.64s/it, est. speed input: 7.30 toks/s, output: 22.79 toks/s]
+[FAIL] scibench_atkins_39   | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.00 (0/5) | steps=6 | seg=prompt | exclude_reason=below_majority
+    progress: 5/15 | elapsed 18m34s | avg 223s/task | ETA 37m09s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:39<00:00, 39.80s/it, est. speed input: 6.13 toks/s, output: 22.82 toks/s]Processed prompts: 100%|██████████| 1/1 [00:39<00:00, 39.80s/it, est. speed input: 6.13 toks/s, output: 22.82 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.58s/it, est. speed input: 11.31 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.58s/it, est. speed input: 11.31 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.37s/it, est. speed input: 14.91 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.37s/it, est. speed input: 14.91 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.21s/it, est. speed input: 11.51 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.21s/it, est. speed input: 11.51 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.33s/it, est. speed input: 12.62 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.33s/it, est. speed input: 12.62 toks/s, output: 22.76 toks/s]
+[FAIL] scibench_stat_524    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=9 | seg=prompt | exclude_reason=below_majority
+    progress: 6/15 | elapsed 20m45s | avg 208s/task | ETA 31m08s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:32<00:00, 32.07s/it, est. speed input: 9.48 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:32<00:00, 32.07s/it, est. speed input: 9.48 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:34<00:00, 34.22s/it, est. speed input: 8.88 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:34<00:00, 34.22s/it, est. speed input: 8.88 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.55s/it, est. speed input: 11.04 toks/s, output: 22.51 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.55s/it, est. speed input: 11.04 toks/s, output: 22.51 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.17s/it, est. speed input: 8.64 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.17s/it, est. speed input: 8.64 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.03s/it, est. speed input: 13.80 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.03s/it, est. speed input: 13.80 toks/s, output: 22.70 toks/s]
+[FAIL] scibench_diff_308    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=12 | seg=prompt | exclude_reason=below_majority
+    progress: 7/15 | elapsed 23m32s | avg 202s/task | ETA 26m53s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.77s/it, est. speed input: 9.20 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.77s/it, est. speed input: 9.20 toks/s, output: 22.77 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.65s/it, est. speed input: 10.53 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:21<00:00, 21.65s/it, est. speed input: 10.53 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.58s/it, est. speed input: 12.97 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.58s/it, est. speed input: 12.97 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.51s/it, est. speed input: 7.24 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:31<00:00, 31.51s/it, est. speed input: 7.24 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:43<00:00, 43.63s/it, est. speed input: 5.23 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:43<00:00, 43.63s/it, est. speed input: 5.23 toks/s, output: 22.80 toks/s]
+[OK] scibench_quan_516    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=10 | seg=prompt
+    progress: 8/15 | elapsed 25m56s | avg 195s/task | ETA 22m42s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.45s/it, est. speed input: 17.39 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.45s/it, est. speed input: 17.39 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.88s/it, est. speed input: 13.38 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.88s/it, est. speed input: 13.38 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.65s/it, est. speed input: 14.58 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.65s/it, est. speed input: 14.58 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.79s/it, est. speed input: 25.54 toks/s, output: 22.59 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.79s/it, est. speed input: 25.54 toks/s, output: 22.59 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.44s/it, est. speed input: 19.07 toks/s, output: 22.61 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.44s/it, est. speed input: 19.07 toks/s, output: 22.61 toks/s]
+[OK] scibench_chemmc_177  | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=5 | seg=prompt
+    progress: 9/15 | elapsed 27m02s | avg 180s/task | ETA 18m01s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.66s/it, est. speed input: 14.19 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.66s/it, est. speed input: 14.19 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.32s/it, est. speed input: 18.37 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.33s/it, est. speed input: 18.37 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.06s/it, est. speed input: 14.80 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.06s/it, est. speed input: 14.80 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.67s/it, est. speed input: 15.22 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.67s/it, est. speed input: 15.22 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.04s/it, est. speed input: 17.27 toks/s, output: 22.59 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.04s/it, est. speed input: 17.27 toks/s, output: 22.59 toks/s]
+[OK] scibench_fund_384    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=5 | seg=prompt
+    progress: 10/15 | elapsed 28m16s | avg 170s/task | ETA 14m08s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:36<00:00, 36.25s/it, est. speed input: 6.29 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:36<00:00, 36.25s/it, est. speed input: 6.29 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.91s/it, est. speed input: 7.62 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.91s/it, est. speed input: 7.62 toks/s, output: 22.80 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:33<00:00, 33.46s/it, est. speed input: 6.81 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:33<00:00, 33.46s/it, est. speed input: 6.81 toks/s, output: 22.80 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:37<00:00, 37.88s/it, est. speed input: 6.02 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:37<00:00, 37.88s/it, est. speed input: 6.02 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.59s/it, est. speed input: 9.27 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.60s/it, est. speed input: 9.27 toks/s, output: 22.73 toks/s]
+[OK] scibench_thermo_649  | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=13 | seg=prompt
+    progress: 11/15 | elapsed 31m05s | avg 170s/task | ETA 11m18s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.29s/it, est. speed input: 14.55 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.29s/it, est. speed input: 14.55 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.18s/it, est. speed input: 16.72 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.18s/it, est. speed input: 16.72 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.61s/it, est. speed input: 17.41 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.61s/it, est. speed input: 17.41 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.72s/it, est. speed input: 16.10 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.72s/it, est. speed input: 16.10 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.50s/it, est. speed input: 14.36 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.50s/it, est. speed input: 14.36 toks/s, output: 22.72 toks/s]
+[OK] scibench_atkins_2    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=7 | seg=prompt
+    progress: 12/15 | elapsed 32m29s | avg 162s/task | ETA 8m07s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.01s/it, est. speed input: 12.83 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.01s/it, est. speed input: 12.83 toks/s, output: 22.77 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.60s/it, est. speed input: 16.98 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.60s/it, est. speed input: 16.98 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.38s/it, est. speed input: 16.07 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.38s/it, est. speed input: 16.07 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.30s/it, est. speed input: 15.10 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.30s/it, est. speed input: 15.10 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.90s/it, est. speed input: 8.92 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.90s/it, est. speed input: 8.92 toks/s, output: 22.78 toks/s]
+[OK] scibench_fund_366    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=5 | seg=prompt
+    progress: 13/15 | elapsed 34m02s | avg 157s/task | ETA 5m14s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.36s/it, est. speed input: 11.88 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.36s/it, est. speed input: 11.88 toks/s, output: 22.77 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.42s/it, est. speed input: 14.13 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.42s/it, est. speed input: 14.13 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.96s/it, est. speed input: 19.89 toks/s, output: 22.62 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.96s/it, est. speed input: 19.89 toks/s, output: 22.62 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.97s/it, est. speed input: 10.92 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.97s/it, est. speed input: 10.92 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.00s/it, est. speed input: 10.90 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.00s/it, est. speed input: 10.90 toks/s, output: 22.75 toks/s]
+[OK] scibench_diff_307    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=5 | seg=prompt
+    progress: 14/15 | elapsed 35m36s | avg 153s/task | ETA 2m32s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.79s/it, est. speed input: 9.96 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.79s/it, est. speed input: 9.96 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.06s/it, est. speed input: 7.86 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.06s/it, est. speed input: 7.86 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.09s/it, est. speed input: 12.24 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.09s/it, est. speed input: 12.24 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.91s/it, est. speed input: 8.24 toks/s, output: 22.79 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.91s/it, est. speed input: 8.24 toks/s, output: 22.79 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.04s/it, est. speed input: 5.62 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.04s/it, est. speed input: 5.62 toks/s, output: 22.80 toks/s]
+[OK] scibench_stat_538    | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=7 | seg=prompt
+    progress: 15/15 | elapsed 37m45s | avg 151s/task | ETA 0s
+
+Done. Processed: 15 | Verified: 9 | Excluded: 6
+Segmentation methods (chosen baselines): prompt=15
+Segmentation methods (verified): prompt=9
+Segmentation methods (excluded): prompt=6
+Verified step_count distribution: 10=1, 13=1, 3=1, 5=4, 7=2
+Excluded by reason: below_majority=6
+Thesis note: 6 task(s) excluded — majority of 5 samples not correct (>= 3) or chosen baseline too short
+Output: /root/msc_thesis_experiment/data/baseline_cots.jsonl
+Sample details: /root/msc_thesis_experiment/data/baseline_cots_samples.jsonl
+Post-run checks:
+  jq -r 'select(.verified==true) | .segmentation_method' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort | uniq -c
+  jq -r 'select(.verified==false) | .exclude_reason' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort | uniq -c
+  jq -r 'select(.verified==true) | .step_count' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort -n | uniq -c
+[rank0]:[W616 19:10:02.143138362 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+INFO 06-16 19:10:16 config.py:510] This model supports multiple tasks: {'classify', 'generate', 'score', 'embed', 'reward'}. Defaulting to 'generate'.
+INFO 06-16 19:10:16 llm_engine.py:234] Initializing an LLM engine (v0.6.6) with config: model='deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', speculative_config=None, tokenizer='deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=16384, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=deepseek-ai/DeepSeek-R1-Distill-Qwen-32B, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=True, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output"],"candidate_compile_sizes":[],"compile_sizes":[],"capture_sizes":[256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"max_capture_size":256}, use_cached_outputs=False, 
+INFO 06-16 19:10:18 selector.py:120] Using Flash Attention backend.
+INFO 06-16 19:10:20 model_runner.py:1094] Starting to load model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B...
+INFO 06-16 19:10:20 weight_utils.py:251] Using model weights format ['*.safetensors']
+Loading safetensors checkpoint shards:   0% Completed | 0/8 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  12% Completed | 1/8 [00:00<00:03,  2.22it/s]
+Loading safetensors checkpoint shards:  25% Completed | 2/8 [00:01<00:04,  1.20it/s]
+Loading safetensors checkpoint shards:  38% Completed | 3/8 [00:02<00:05,  1.06s/it]
+Loading safetensors checkpoint shards:  50% Completed | 4/8 [00:04<00:04,  1.15s/it]
+Loading safetensors checkpoint shards:  62% Completed | 5/8 [00:05<00:03,  1.21s/it]
+Loading safetensors checkpoint shards:  75% Completed | 6/8 [00:06<00:02,  1.24s/it]
+Loading safetensors checkpoint shards:  88% Completed | 7/8 [00:08<00:01,  1.26s/it]
+Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:09<00:00,  1.29s/it]
+Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:09<00:00,  1.18s/it]
+
+INFO 06-16 19:10:31 model_runner.py:1099] Loading model weights took 61.0607 GB
+INFO 06-16 19:10:35 worker.py:241] Memory profiling takes 4.40 seconds
+INFO 06-16 19:10:35 worker.py:241] the current vLLM instance can use total_gpu_memory (79.25GiB) x gpu_memory_utilization (0.92) = 72.91GiB
+INFO 06-16 19:10:35 worker.py:241] model weights take 61.06GiB; non_torch_memory takes 0.10GiB; PyTorch activation peak memory takes 3.16GiB; the rest of the memory reserved for KV Cache is 8.59GiB.
+INFO 06-16 19:10:35 gpu_executor.py:76] # GPU blocks: 2197, # CPU blocks: 1024
+INFO 06-16 19:10:35 gpu_executor.py:80] Maximum concurrency for 16384 tokens per request: 2.15x
+INFO 06-16 19:10:42 model_runner.py:1415] Capturing cudagraphs for decoding. This may lead to unexpected consequences if the model is not static. To run the model in eager mode, set 'enforce_eager=True' or use '--enforce-eager' in the CLI. If out-of-memory error occurs during cudagraph capture, consider decreasing `gpu_memory_utilization` or switching to eager mode. You can also reduce the `max_num_seqs` as needed to decrease memory usage.
+Capturing CUDA graph shapes:   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graph shapes:   3%|▎         | 1/35 [00:00<00:19,  1.75it/s]Capturing CUDA graph shapes:   6%|▌         | 2/35 [00:01<00:17,  1.85it/s]Capturing CUDA graph shapes:   9%|▊         | 3/35 [00:01<00:17,  1.87it/s]Capturing CUDA graph shapes:  11%|█▏        | 4/35 [00:02<00:17,  1.81it/s]Capturing CUDA graph shapes:  14%|█▍        | 5/35 [00:02<00:16,  1.85it/s]Capturing CUDA graph shapes:  17%|█▋        | 6/35 [00:03<00:15,  1.90it/s]Capturing CUDA graph shapes:  20%|██        | 7/35 [00:03<00:14,  1.91it/s]Capturing CUDA graph shapes:  23%|██▎       | 8/35 [00:04<00:14,  1.93it/s]Capturing CUDA graph shapes:  26%|██▌       | 9/35 [00:04<00:13,  1.96it/s]Capturing CUDA graph shapes:  29%|██▊       | 10/35 [00:05<00:12,  1.99it/s]Capturing CUDA graph shapes:  31%|███▏      | 11/35 [00:05<00:12,  1.98it/s]Capturing CUDA graph shapes:  34%|███▍      | 12/35 [00:06<00:11,  1.98it/s]Capturing CUDA graph shapes:  37%|███▋      | 13/35 [00:06<00:11,  1.98it/s]Capturing CUDA graph shapes:  40%|████      | 14/35 [00:07<00:10,  1.99it/s]Capturing CUDA graph shapes:  43%|████▎     | 15/35 [00:07<00:10,  1.97it/s]Capturing CUDA graph shapes:  46%|████▌     | 16/35 [00:08<00:09,  2.00it/s]Capturing CUDA graph shapes:  49%|████▊     | 17/35 [00:08<00:08,  2.04it/s]Capturing CUDA graph shapes:  51%|█████▏    | 18/35 [00:09<00:08,  2.06it/s]Capturing CUDA graph shapes:  54%|█████▍    | 19/35 [00:09<00:07,  2.07it/s]Capturing CUDA graph shapes:  57%|█████▋    | 20/35 [00:10<00:07,  2.06it/s]Capturing CUDA graph shapes:  60%|██████    | 21/35 [00:10<00:07,  1.99it/s]Capturing CUDA graph shapes:  63%|██████▎   | 22/35 [00:11<00:06,  1.87it/s]Capturing CUDA graph shapes:  66%|██████▌   | 23/35 [00:11<00:06,  1.87it/s]Capturing CUDA graph shapes:  69%|██████▊   | 24/35 [00:12<00:05,  1.91it/s]Capturing CUDA graph shapes:  71%|███████▏  | 25/35 [00:12<00:05,  1.95it/s]Capturing CUDA graph shapes:  74%|███████▍  | 26/35 [00:13<00:04,  2.02it/s]Capturing CUDA graph shapes:  77%|███████▋  | 27/35 [00:13<00:03,  2.08it/s]Capturing CUDA graph shapes:  80%|████████  | 28/35 [00:14<00:03,  2.12it/s]Capturing CUDA graph shapes:  83%|████████▎ | 29/35 [00:14<00:02,  2.13it/s]Capturing CUDA graph shapes:  86%|████████▌ | 30/35 [00:15<00:02,  2.15it/s]Capturing CUDA graph shapes:  89%|████████▊ | 31/35 [00:15<00:01,  2.17it/s]Capturing CUDA graph shapes:  91%|█████████▏| 32/35 [00:15<00:01,  2.20it/s]Capturing CUDA graph shapes:  94%|█████████▍| 33/35 [00:16<00:00,  2.23it/s]Capturing CUDA graph shapes:  97%|█████████▋| 34/35 [00:16<00:00,  2.25it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:17<00:00,  2.24it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:17<00:00,  2.02it/s]
+INFO 06-16 19:11:00 model_runner.py:1535] Graph capturing finished in 17 secs, took 0.32 GiB
+INFO 06-16 19:11:00 llm_engine.py:431] init engine (profile, create kv cache, warmup model) took 28.97 seconds
+Tasks: 24 | Models: 1 | Work items: 24
+Already verified (skipped): 0 | Remaining: 24
+Output: /root/msc_thesis_experiment/data/baseline_cots.jsonl | verification_samples=5 (majority>=3) | min_steps=3
+Sample details: /root/msc_thesis_experiment/data/baseline_cots_samples.jsonl
+Backend: vllm
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.20s/it, est. speed input: 16.05 toks/s, output: 22.66 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.20s/it, est. speed input: 16.05 toks/s, output: 22.66 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.78s/it, est. speed input: 11.41 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.78s/it, est. speed input: 11.41 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.09s/it, est. speed input: 14.37 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.09s/it, est. speed input: 14.37 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:26<00:00, 26.73s/it, est. speed input: 9.73 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:26<00:00, 26.73s/it, est. speed input: 9.73 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.12s/it, est. speed input: 17.20 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.12s/it, est. speed input: 17.20 toks/s, output: 22.69 toks/s]
+[OK] kk_p3_12             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=7 | seg=prompt
+    progress: 1/24 | elapsed 1m45s | avg 105s/task | ETA 40m16s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.43s/it, est. speed input: 16.66 toks/s, output: 22.68 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.43s/it, est. speed input: 16.66 toks/s, output: 22.68 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.58s/it, est. speed input: 12.49 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.58s/it, est. speed input: 12.49 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.40s/it, est. speed input: 13.97 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.40s/it, est. speed input: 13.97 toks/s, output: 22.72 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.76s/it, est. speed input: 17.42 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.76s/it, est. speed input: 17.42 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.47s/it, est. speed input: 15.60 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.47s/it, est. speed input: 15.60 toks/s, output: 22.70 toks/s]
+[OK] kk_p3_32             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=7 | seg=prompt
+    progress: 2/24 | elapsed 3m16s | avg 98s/task | ETA 36m02s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.34s/it, est. speed input: 25.52 toks/s, output: 22.62 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.34s/it, est. speed input: 25.52 toks/s, output: 22.62 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.96s/it, est. speed input: 26.52 toks/s, output: 22.60 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.96s/it, est. speed input: 26.52 toks/s, output: 22.60 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.87s/it, est. speed input: 26.74 toks/s, output: 22.59 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.87s/it, est. speed input: 26.74 toks/s, output: 22.59 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.64s/it, est. speed input: 30.56 toks/s, output: 22.57 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.64s/it, est. speed input: 30.56 toks/s, output: 22.57 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.28s/it, est. speed input: 25.68 toks/s, output: 22.57 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.28s/it, est. speed input: 25.68 toks/s, output: 22.57 toks/s]
+[OK] kk_p3_4              | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=3 | seg=prompt
+    progress: 3/24 | elapsed 4m11s | avg 84s/task | ETA 29m20s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.89s/it, est. speed input: 10.56 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.89s/it, est. speed input: 10.56 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.93s/it, est. speed input: 8.79 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.93s/it, est. speed input: 8.79 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:32<00:00, 32.48s/it, est. speed input: 8.10 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:32<00:00, 32.48s/it, est. speed input: 8.10 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:34<00:00, 34.08s/it, est. speed input: 7.72 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:34<00:00, 34.08s/it, est. speed input: 7.72 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.78s/it, est. speed input: 9.47 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.78s/it, est. speed input: 9.47 toks/s, output: 22.75 toks/s]
+[OK] kk_p3_52             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=13 | seg=prompt
+    progress: 4/24 | elapsed 6m47s | avg 102s/task | ETA 33m56s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.41s/it, est. speed input: 20.81 toks/s, output: 22.67 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.41s/it, est. speed input: 20.81 toks/s, output: 22.67 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.00s/it, est. speed input: 19.92 toks/s, output: 22.64 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.00s/it, est. speed input: 19.92 toks/s, output: 22.64 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.11s/it, est. speed input: 19.78 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.11s/it, est. speed input: 19.78 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.93s/it, est. speed input: 9.99 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.93s/it, est. speed input: 9.99 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.97s/it, est. speed input: 14.71 toks/s, output: 22.67 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.97s/it, est. speed input: 14.71 toks/s, output: 22.67 toks/s]
+[OK] kk_p4_56             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=6 | seg=prompt
+    progress: 5/24 | elapsed 8m23s | avg 101s/task | ETA 31m52s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.12s/it, est. speed input: 9.03 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:30<00:00, 30.12s/it, est. speed input: 9.03 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [01:42<00:00, 102.08s/it, est. speed input: 2.66 toks/s, output: 22.77 toks/s]Processed prompts: 100%|██████████| 1/1 [01:42<00:00, 102.08s/it, est. speed input: 2.66 toks/s, output: 22.77 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [02:09<00:00, 129.23s/it, est. speed input: 2.10 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [02:09<00:00, 129.23s/it, est. speed input: 2.10 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.04s/it, est. speed input: 13.57 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.04s/it, est. speed input: 13.57 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:56<00:00, 56.79s/it, est. speed input: 4.79 toks/s, output: 22.80 toks/s]Processed prompts: 100%|██████████| 1/1 [00:56<00:00, 56.79s/it, est. speed input: 4.79 toks/s, output: 22.80 toks/s]
+[OK] kk_p4_75             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=66 | seg=prompt
+    progress: 6/24 | elapsed 14m08s | avg 141s/task | ETA 42m26s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.13s/it, est. speed input: 14.26 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.13s/it, est. speed input: 14.26 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:39<00:00, 39.73s/it, est. speed input: 7.22 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:39<00:00, 39.73s/it, est. speed input: 7.22 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:56<00:00, 56.24s/it, est. speed input: 5.10 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:56<00:00, 56.24s/it, est. speed input: 5.10 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:36<00:00, 36.97s/it, est. speed input: 7.76 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:36<00:00, 36.97s/it, est. speed input: 7.76 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.50s/it, est. speed input: 15.51 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.50s/it, est. speed input: 15.51 toks/s, output: 22.70 toks/s]
+[FAIL] kk_p4_52             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=8 | seg=prompt | exclude_reason=below_majority
+    progress: 7/24 | elapsed 17m12s | avg 147s/task | ETA 41m47s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.29s/it, est. speed input: 22.46 toks/s, output: 22.62 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.29s/it, est. speed input: 22.46 toks/s, output: 22.62 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.59s/it, est. speed input: 14.85 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.59s/it, est. speed input: 14.85 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.96s/it, est. speed input: 10.63 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.96s/it, est. speed input: 10.63 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.59s/it, est. speed input: 21.92 toks/s, output: 22.63 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.59s/it, est. speed input: 21.92 toks/s, output: 22.63 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.09s/it, est. speed input: 11.95 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.09s/it, est. speed input: 11.95 toks/s, output: 22.74 toks/s]
+[OK] kk_p4_66             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=6 | seg=prompt
+    progress: 8/24 | elapsed 18m50s | avg 141s/task | ETA 37m41s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.38s/it, est. speed input: 10.74 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.38s/it, est. speed input: 10.74 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.45s/it, est. speed input: 15.93 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.45s/it, est. speed input: 15.93 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.57s/it, est. speed input: 15.02 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.57s/it, est. speed input: 15.02 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:28<00:00, 28.11s/it, est. speed input: 10.46 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:28<00:00, 28.11s/it, est. speed input: 10.46 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.80s/it, est. speed input: 12.35 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.80s/it, est. speed input: 12.35 toks/s, output: 22.73 toks/s]
+[OK] kk_p5_77             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=10 | seg=prompt
+    progress: 9/24 | elapsed 20m54s | avg 139s/task | ETA 34m51s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.42s/it, est. speed input: 11.53 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.42s/it, est. speed input: 11.53 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.06s/it, est. speed input: 20.83 toks/s, output: 22.68 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.06s/it, est. speed input: 20.83 toks/s, output: 22.68 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.49s/it, est. speed input: 9.94 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.49s/it, est. speed input: 9.94 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.93s/it, est. speed input: 12.24 toks/s, output: 22.73 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.93s/it, est. speed input: 12.24 toks/s, output: 22.73 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.12s/it, est. speed input: 17.11 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.12s/it, est. speed input: 17.11 toks/s, output: 22.72 toks/s]
+[OK] kk_p5_23             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=11 | seg=prompt
+    progress: 10/24 | elapsed 22m53s | avg 137s/task | ETA 32m02s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [01:29<00:00, 89.57s/it, est. speed input: 3.19 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [01:29<00:00, 89.57s/it, est. speed input: 3.19 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.19s/it, est. speed input: 17.66 toks/s, output: 22.67 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.19s/it, est. speed input: 17.66 toks/s, output: 22.67 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.99s/it, est. speed input: 17.89 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:15<00:00, 15.99s/it, est. speed input: 17.89 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.18s/it, est. speed input: 11.83 toks/s, output: 22.74 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.18s/it, est. speed input: 11.83 toks/s, output: 22.74 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:57<00:00, 57.91s/it, est. speed input: 4.94 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:57<00:00, 57.91s/it, est. speed input: 4.94 toks/s, output: 22.78 toks/s]
+[OK] kk_p5_24             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=18 | seg=prompt
+    progress: 11/24 | elapsed 26m28s | avg 144s/task | ETA 31m16s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [01:26<00:00, 86.79s/it, est. speed input: 3.57 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [01:26<00:00, 86.79s/it, est. speed input: 3.57 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:49<00:00, 50.00s/it, est. speed input: 6.20 toks/s, output: 22.78 toks/s]Processed prompts: 100%|██████████| 1/1 [00:49<00:00, 50.00s/it, est. speed input: 6.20 toks/s, output: 22.78 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.93s/it, est. speed input: 11.95 toks/s, output: 22.75 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.93s/it, est. speed input: 11.95 toks/s, output: 22.75 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.63s/it, est. speed input: 8.70 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:35<00:00, 35.63s/it, est. speed input: 8.70 toks/s, output: 22.76 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:32<00:00, 32.86s/it, est. speed input: 9.43 toks/s, output: 22.76 toks/s]Processed prompts: 100%|██████████| 1/1 [00:32<00:00, 32.86s/it, est. speed input: 9.43 toks/s, output: 22.76 toks/s]
+[FAIL] kk_p5_35             | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=22 | seg=prompt | exclude_reason=below_majority
+    progress: 12/24 | elapsed 30m28s | avg 152s/task | ETA 30m28s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.37s/it, est. speed input: 45.06 toks/s, output: 22.53 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.37s/it, est. speed input: 45.06 toks/s, output: 22.53 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.08s/it, est. speed input: 47.66 toks/s, output: 22.45 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.08s/it, est. speed input: 47.66 toks/s, output: 22.45 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.74s/it, est. speed input: 35.92 toks/s, output: 22.56 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.74s/it, est. speed input: 35.92 toks/s, output: 22.56 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.34s/it, est. speed input: 45.35 toks/s, output: 22.49 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.34s/it, est. speed input: 45.35 toks/s, output: 22.49 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.59s/it, est. speed input: 36.73 toks/s, output: 22.61 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.59s/it, est. speed input: 36.73 toks/s, output: 22.61 toks/s]
+[OK] justlogic_88         | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=3 | seg=prompt
+    progress: 13/24 | elapsed 31m06s | avg 144s/task | ETA 26m19s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.29s/it, est. speed input: 47.79 toks/s, output: 22.48 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.29s/it, est. speed input: 47.79 toks/s, output: 22.48 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.30s/it, est. speed input: 40.19 toks/s, output: 22.55 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.30s/it, est. speed input: 40.19 toks/s, output: 22.55 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.70s/it, est. speed input: 44.41 toks/s, output: 22.47 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.70s/it, est. speed input: 44.41 toks/s, output: 22.47 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.70s/it, est. speed input: 32.84 toks/s, output: 22.59 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.70s/it, est. speed input: 32.84 toks/s, output: 22.59 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.54s/it, est. speed input: 33.55 toks/s, output: 22.54 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.54s/it, est. speed input: 33.55 toks/s, output: 22.54 toks/s]
+[FAIL] justlogic_842        | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=3 | seg=prompt | exclude_reason=below_majority
+    progress: 14/24 | elapsed 31m56s | avg 137s/task | ETA 22m48s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.88s/it, est. speed input: 26.34 toks/s, output: 22.58 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.88s/it, est. speed input: 26.34 toks/s, output: 22.58 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.42s/it, est. speed input: 22.51 toks/s, output: 22.62 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.42s/it, est. speed input: 22.51 toks/s, output: 22.62 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.36s/it, est. speed input: 27.30 toks/s, output: 22.63 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.36s/it, est. speed input: 27.30 toks/s, output: 22.63 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.89s/it, est. speed input: 20.75 toks/s, output: 22.66 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.89s/it, est. speed input: 20.75 toks/s, output: 22.66 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.94s/it, est. speed input: 28.12 toks/s, output: 22.60 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.94s/it, est. speed input: 28.12 toks/s, output: 22.60 toks/s]
+[OK] justlogic_1552       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=7 | seg=prompt
+    progress: 15/24 | elapsed 33m30s | avg 134s/task | ETA 20m06s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.34s/it, est. speed input: 20.36 toks/s, output: 22.67 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.34s/it, est. speed input: 20.36 toks/s, output: 22.67 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.04s/it, est. speed input: 50.13 toks/s, output: 22.44 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.04s/it, est. speed input: 50.13 toks/s, output: 22.44 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.56s/it, est. speed input: 30.54 toks/s, output: 22.58 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.56s/it, est. speed input: 30.54 toks/s, output: 22.58 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.25s/it, est. speed input: 26.65 toks/s, output: 22.65 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.25s/it, est. speed input: 26.65 toks/s, output: 22.65 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 20.00s/it, est. speed input: 17.65 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 20.00s/it, est. speed input: 17.65 toks/s, output: 22.70 toks/s]
+[OK] justlogic_1445       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=6 | seg=prompt
+    progress: 16/24 | elapsed 34m54s | avg 131s/task | ETA 17m27s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.03s/it, est. speed input: 63.14 toks/s, output: 22.37 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.03s/it, est. speed input: 63.14 toks/s, output: 22.37 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.70s/it, est. speed input: 22.81 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.70s/it, est. speed input: 22.81 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.10s/it, est. speed input: 31.49 toks/s, output: 22.64 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.10s/it, est. speed input: 31.49 toks/s, output: 22.64 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.32s/it, est. speed input: 30.94 toks/s, output: 22.65 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.32s/it, est. speed input: 30.94 toks/s, output: 22.65 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.37s/it, est. speed input: 28.51 toks/s, output: 22.60 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.37s/it, est. speed input: 28.51 toks/s, output: 22.60 toks/s]
+[OK] justlogic_3347       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=5 | seg=prompt
+    progress: 17/24 | elapsed 36m05s | avg 127s/task | ETA 14m51s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.59s/it, est. speed input: 55.40 toks/s, output: 22.46 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.59s/it, est. speed input: 55.40 toks/s, output: 22.46 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.43s/it, est. speed input: 29.36 toks/s, output: 22.60 toks/s]Processed prompts: 100%|██████████| 1/1 [00:12<00:00, 12.43s/it, est. speed input: 29.36 toks/s, output: 22.60 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.77s/it, est. speed input: 19.44 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:18<00:00, 18.77s/it, est. speed input: 19.44 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.83s/it, est. speed input: 53.46 toks/s, output: 22.41 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.83s/it, est. speed input: 53.46 toks/s, output: 22.41 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.42s/it, est. speed input: 18.80 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:19<00:00, 19.42s/it, est. speed input: 18.80 toks/s, output: 22.71 toks/s]
+[FAIL] justlogic_3663       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.40 (2/5) | steps=5 | seg=prompt | exclude_reason=below_majority
+    progress: 18/24 | elapsed 37m29s | avg 125s/task | ETA 12m29s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.38s/it, est. speed input: 19.87 toks/s, output: 22.66 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.38s/it, est. speed input: 19.87 toks/s, output: 22.66 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.26s/it, est. speed input: 49.05 toks/s, output: 22.40 toks/s]Processed prompts: 100%|██████████| 1/1 [00:08<00:00,  8.26s/it, est. speed input: 49.05 toks/s, output: 22.40 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.13s/it, est. speed input: 36.39 toks/s, output: 22.55 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.13s/it, est. speed input: 36.39 toks/s, output: 22.55 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.63s/it, est. speed input: 22.97 toks/s, output: 22.63 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.63s/it, est. speed input: 22.97 toks/s, output: 22.63 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.11s/it, est. speed input: 14.94 toks/s, output: 22.72 toks/s]Processed prompts: 100%|██████████| 1/1 [00:27<00:00, 27.11s/it, est. speed input: 14.94 toks/s, output: 22.72 toks/s]
+[OK] justlogic_3772       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=7 | seg=prompt
+    progress: 19/24 | elapsed 39m07s | avg 124s/task | ETA 10m17s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.22s/it, est. speed input: 46.17 toks/s, output: 22.50 toks/s]Processed prompts: 100%|██████████| 1/1 [00:10<00:00, 10.22s/it, est. speed input: 46.17 toks/s, output: 22.50 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.87s/it, est. speed input: 47.80 toks/s, output: 22.48 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.87s/it, est. speed input: 47.80 toks/s, output: 22.48 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.41s/it, est. speed input: 35.21 toks/s, output: 22.60 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.41s/it, est. speed input: 35.21 toks/s, output: 22.60 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.22s/it, est. speed input: 42.06 toks/s, output: 22.54 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.22s/it, est. speed input: 42.06 toks/s, output: 22.54 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.37s/it, est. speed input: 23.17 toks/s, output: 22.68 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.37s/it, est. speed input: 23.17 toks/s, output: 22.68 toks/s]
+[FAIL] justlogic_2421       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.00 (0/5) | steps=7 | seg=prompt | exclude_reason=below_majority
+    progress: 20/24 | elapsed 40m22s | avg 121s/task | ETA 8m04s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.50s/it, est. speed input: 16.88 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.50s/it, est. speed input: 16.88 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.01s/it, est. speed input: 19.91 toks/s, output: 22.71 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.01s/it, est. speed input: 19.91 toks/s, output: 22.71 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.01s/it, est. speed input: 20.75 toks/s, output: 22.70 toks/s]Processed prompts: 100%|██████████| 1/1 [00:24<00:00, 24.01s/it, est. speed input: 20.75 toks/s, output: 22.70 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.72s/it, est. speed input: 29.79 toks/s, output: 22.61 toks/s]Processed prompts: 100%|██████████| 1/1 [00:16<00:00, 16.72s/it, est. speed input: 29.79 toks/s, output: 22.61 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.34s/it, est. speed input: 43.92 toks/s, output: 22.49 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.34s/it, est. speed input: 43.92 toks/s, output: 22.49 toks/s]
+[OK] justlogic_4935       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=8 | seg=prompt
+    progress: 21/24 | elapsed 42m21s | avg 121s/task | ETA 6m03s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.70s/it, est. speed input: 96.46 toks/s, output: 22.10 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.70s/it, est. speed input: 96.46 toks/s, output: 22.10 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.37s/it, est. speed input: 58.69 toks/s, output: 22.41 toks/s]Processed prompts: 100%|██████████| 1/1 [00:09<00:00,  9.37s/it, est. speed input: 58.69 toks/s, output: 22.41 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.44s/it, est. speed input: 101.19 toks/s, output: 22.08 toks/s]Processed prompts: 100%|██████████| 1/1 [00:05<00:00,  5.44s/it, est. speed input: 101.19 toks/s, output: 22.08 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.37s/it, est. speed input: 86.38 toks/s, output: 22.14 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.37s/it, est. speed input: 86.38 toks/s, output: 22.14 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.92s/it, est. speed input: 69.41 toks/s, output: 22.34 toks/s]Processed prompts: 100%|██████████| 1/1 [00:07<00:00,  7.92s/it, est. speed input: 69.41 toks/s, output: 22.34 toks/s]
+[OK] justlogic_4044       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=1.00 (5/5) | steps=4 | seg=prompt
+    progress: 22/24 | elapsed 43m03s | avg 117s/task | ETA 3m54s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.96s/it, est. speed input: 19.19 toks/s, output: 22.69 toks/s]Processed prompts: 100%|██████████| 1/1 [00:29<00:00, 29.96s/it, est. speed input: 19.19 toks/s, output: 22.69 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.00s/it, est. speed input: 23.00 toks/s, output: 22.64 toks/s]Processed prompts: 100%|██████████| 1/1 [00:25<00:00, 25.00s/it, est. speed input: 23.00 toks/s, output: 22.64 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.48s/it, est. speed input: 28.07 toks/s, output: 22.60 toks/s]Processed prompts: 100%|██████████| 1/1 [00:20<00:00, 20.48s/it, est. speed input: 28.07 toks/s, output: 22.60 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.05s/it, est. speed input: 26.08 toks/s, output: 22.63 toks/s]Processed prompts: 100%|██████████| 1/1 [00:22<00:00, 22.05s/it, est. speed input: 26.08 toks/s, output: 22.63 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.38s/it, est. speed input: 24.59 toks/s, output: 22.62 toks/s]Processed prompts: 100%|██████████| 1/1 [00:23<00:00, 23.38s/it, est. speed input: 24.59 toks/s, output: 22.62 toks/s]
+[OK] justlogic_4043       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.60 (3/5) | steps=8 | seg=prompt
+    progress: 23/24 | elapsed 45m20s | avg 118s/task | ETA 1m58s
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.90s/it, est. speed input: 63.46 toks/s, output: 22.31 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.90s/it, est. speed input: 63.46 toks/s, output: 22.31 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.84s/it, est. speed input: 31.64 toks/s, output: 22.61 toks/s]Processed prompts: 100%|██████████| 1/1 [00:13<00:00, 13.84s/it, est. speed input: 31.64 toks/s, output: 22.61 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.29s/it, est. speed input: 69.69 toks/s, output: 22.27 toks/s]Processed prompts: 100%|██████████| 1/1 [00:06<00:00,  6.29s/it, est. speed input: 69.69 toks/s, output: 22.27 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.39s/it, est. speed input: 38.45 toks/s, output: 22.56 toks/s]Processed prompts: 100%|██████████| 1/1 [00:11<00:00, 11.39s/it, est. speed input: 38.45 toks/s, output: 22.56 toks/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.66s/it, est. speed input: 29.88 toks/s, output: 22.58 toks/s]Processed prompts: 100%|██████████| 1/1 [00:14<00:00, 14.66s/it, est. speed input: 29.88 toks/s, output: 22.58 toks/s]
+[OK] justlogic_4735       | DeepSeek-R1-Distill-Qwen-32B   | solve_rate=0.80 (4/5) | steps=5 | seg=prompt
+    progress: 24/24 | elapsed 46m21s | avg 116s/task | ETA 0s
+
+Done. Processed: 24 | Verified: 19 | Excluded: 5
+Segmentation methods (chosen baselines): prompt=24
+Segmentation methods (verified): prompt=19
+Segmentation methods (excluded): prompt=5
+Verified step_count distribution: 10=1, 11=1, 13=1, 18=1, 3=2, 4=1, 5=2, 6=3, 66=1, 7=4, 8=2
+Excluded by reason: below_majority=5
+Thesis note: 5 task(s) excluded — majority of 5 samples not correct (>= 3) or chosen baseline too short
+Output: /root/msc_thesis_experiment/data/baseline_cots.jsonl
+Sample details: /root/msc_thesis_experiment/data/baseline_cots_samples.jsonl
+Post-run checks:
+  jq -r 'select(.verified==true) | .segmentation_method' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort | uniq -c
+  jq -r 'select(.verified==false) | .exclude_reason' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort | uniq -c
+  jq -r 'select(.verified==true) | .step_count' /root/msc_thesis_experiment/data/baseline_cots.jsonl | sort -n | uniq -c
+[rank0]:[W616 19:57:22.239375206 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+Tasks: 15 | Target models: 1
+  - deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+Combinations per task per model: 18 (3 error_types × 3 k × 2 lengths)
+Total combinations: 270 | Already done: 0 | Remaining: 270
+Injection strategy: persistent_agent_v1 (k sequential calls per combination)
+Provider: anthropic | Generator model: claude-sonnet-4-6 | Output: /root/msc_thesis_experiment/data/injections_generated.jsonl
+
+=== target_model=deepseek-ai/DeepSeek-R1-Distill-Qwen-32B | 37 baseline prefix contexts from /root/msc_thesis_experiment/data/baseline_cots.jsonl ===
+[   1/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | incorrect_reasoning  | k=1 short | ok
+[   2/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | incorrect_reasoning  | k=1 long  | ok
+[   3/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | incorrect_reasoning  | k=3 short | ok
+[   4/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | incorrect_reasoning  | k=3 long  | ok
+[   5/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | incorrect_reasoning  | k=5 short | ok
+[   6/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | incorrect_reasoning  | k=5 long  | ok
+[   7/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | paraphrased_shift    | k=1 short | ok
+[   8/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | paraphrased_shift    | k=1 long  | ok
+[   9/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | paraphrased_shift    | k=3 short | ok
+[  10/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | paraphrased_shift    | k=3 long  | ok
+[  11/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | paraphrased_shift    | k=5 short | ok
+[  12/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | paraphrased_shift    | k=5 long  | ok
+[  13/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | off_topic            | k=1 short | ok
+[  14/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | off_topic            | k=1 long  | ok
+[  15/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | off_topic            | k=3 short | ok
+[  16/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | off_topic            | k=3 long  | ok
+[  17/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | off_topic            | k=5 short | ok
+[  18/270] DeepSeek-R1-Distill-Qwen | justlogic_1552       | off_topic            | k=5 long  | ok
+[  19/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | incorrect_reasoning  | k=1 short | ok
+[  20/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | incorrect_reasoning  | k=1 long  | ok
+[  21/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | incorrect_reasoning  | k=3 short | ok
+[  22/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | incorrect_reasoning  | k=3 long  | ok
+[  23/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | incorrect_reasoning  | k=5 short | ok
+[  24/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | incorrect_reasoning  | k=5 long  | ok
+[  25/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | paraphrased_shift    | k=1 short | ok
+[  26/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | paraphrased_shift    | k=1 long  | ok
+[  27/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | paraphrased_shift    | k=3 short | ok
+[  28/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | paraphrased_shift    | k=3 long  | ok
+[  29/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | paraphrased_shift    | k=5 short | ok
+[  30/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | paraphrased_shift    | k=5 long  | ok
+[  31/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | off_topic            | k=1 short | ok
+[  32/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | off_topic            | k=1 long  | ok
+[  33/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | off_topic            | k=3 short | ok
+[  34/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | off_topic            | k=3 long  | ok
+[  35/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | off_topic            | k=5 short | ok
+[  36/270] DeepSeek-R1-Distill-Qwen | justlogic_3347       | off_topic            | k=5 long  | ok
+[  37/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | incorrect_reasoning  | k=1 short | ok
+[  38/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | incorrect_reasoning  | k=1 long  | ok
+[  39/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | incorrect_reasoning  | k=3 short | ok
+[  40/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | incorrect_reasoning  | k=3 long  | ok
+[  41/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | incorrect_reasoning  | k=5 short | ok
+[  42/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | incorrect_reasoning  | k=5 long  | ok
+[  43/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | paraphrased_shift    | k=1 short | ok
+[  44/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | paraphrased_shift    | k=1 long  | ok
+[  45/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | paraphrased_shift    | k=3 short | ok
+[  46/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | paraphrased_shift    | k=3 long  | ok
+[  47/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | paraphrased_shift    | k=5 short | ok
+[  48/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | paraphrased_shift    | k=5 long  | ok
+[  49/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | off_topic            | k=1 short | ok
+[  50/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | off_topic            | k=1 long  | ok
+[  51/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | off_topic            | k=3 short | ok
+[  52/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | off_topic            | k=3 long  | ok
+[  53/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | off_topic            | k=5 short | ok
+[  54/270] DeepSeek-R1-Distill-Qwen | justlogic_4043       | off_topic            | k=5 long  | ok
+[  55/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | incorrect_reasoning  | k=1 short | ok
+[  56/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | incorrect_reasoning  | k=1 long  | ok
+[  57/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | incorrect_reasoning  | k=3 short | ok
+[  58/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | incorrect_reasoning  | k=3 long  | ok
+[  59/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | incorrect_reasoning  | k=5 short | ok
+[  60/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | incorrect_reasoning  | k=5 long  | ok
+[  61/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | paraphrased_shift    | k=1 short | ok
+[  62/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | paraphrased_shift    | k=1 long  | ok
+[  63/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | paraphrased_shift    | k=3 short | ok
+[  64/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | paraphrased_shift    | k=3 long  | ok
+[  65/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | paraphrased_shift    | k=5 short | ok
+[  66/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | paraphrased_shift    | k=5 long  | ok
+[  67/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | off_topic            | k=1 short | ok
+[  68/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | off_topic            | k=1 long  | ok
+[  69/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | off_topic            | k=3 short | ok
+[  70/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | off_topic            | k=3 long  | ok
+[  71/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | off_topic            | k=5 short | ok
+[  72/270] DeepSeek-R1-Distill-Qwen | kk_p3_12             | off_topic            | k=5 long  | ok
+[  73/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | incorrect_reasoning  | k=1 short | ok
+[  74/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | incorrect_reasoning  | k=1 long  | ok
+[  75/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | incorrect_reasoning  | k=3 short | ok
+[  76/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | incorrect_reasoning  | k=3 long  | ok
+[  77/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | incorrect_reasoning  | k=5 short | ok
+[  78/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | incorrect_reasoning  | k=5 long  | ok
+[  79/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | paraphrased_shift    | k=1 short | ok
+[  80/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | paraphrased_shift    | k=1 long  | ok
+[  81/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | paraphrased_shift    | k=3 short | ok
+[  82/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | paraphrased_shift    | k=3 long  | ok
+[  83/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | paraphrased_shift    | k=5 short | ok
+[  84/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | paraphrased_shift    | k=5 long  | ok
+[  85/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | off_topic            | k=1 short | ok
+[  86/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | off_topic            | k=1 long  | ok
+[  87/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | off_topic            | k=3 short | ok
+[  88/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | off_topic            | k=3 long  | ok
+[  89/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | off_topic            | k=5 short | ok
+[  90/270] DeepSeek-R1-Distill-Qwen | kk_p5_24             | off_topic            | k=5 long  | ok
+[  91/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | incorrect_reasoning  | k=1 short | ok
+[  92/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | incorrect_reasoning  | k=1 long  | ok
+[  93/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | incorrect_reasoning  | k=3 short | ok
+[  94/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | incorrect_reasoning  | k=3 long  | ok
+[  95/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | incorrect_reasoning  | k=5 short | ok
+[  96/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | incorrect_reasoning  | k=5 long  | ok
+[  97/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | paraphrased_shift    | k=1 short | ok
+[  98/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | paraphrased_shift    | k=1 long  | ok
+[  99/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | paraphrased_shift    | k=3 short | ok
+[ 100/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | paraphrased_shift    | k=3 long  | ok
+[ 101/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | paraphrased_shift    | k=5 short | ok
+[ 102/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | paraphrased_shift    | k=5 long  | ok
+[ 103/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | off_topic            | k=1 short | ok
+[ 104/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | off_topic            | k=1 long  | ok
+[ 105/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | off_topic            | k=3 short | ok
+[ 106/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | off_topic            | k=3 long  | ok
+[ 107/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | off_topic            | k=5 short | ok
+[ 108/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2391.json | off_topic            | k=5 long  | ok
+[ 109/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | incorrect_reasoning  | k=1 short | ok
+[ 110/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | incorrect_reasoning  | k=1 long  | ok
+[ 111/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | incorrect_reasoning  | k=3 short | ok
+[ 112/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | incorrect_reasoning  | k=3 long  | ok
+[ 113/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | incorrect_reasoning  | k=5 short | ok
+[ 114/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | incorrect_reasoning  | k=5 long  | ok
+[ 115/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | paraphrased_shift    | k=1 short | ok
+[ 116/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | paraphrased_shift    | k=1 long  | ok
+[ 117/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | paraphrased_shift    | k=3 short | ok
+[ 118/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | paraphrased_shift    | k=3 long  | ok
+[ 119/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | paraphrased_shift    | k=5 short | ok
+[ 120/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | paraphrased_shift    | k=5 long  | ok
+[ 121/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | off_topic            | k=1 short | ok
+[ 122/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | off_topic            | k=1 long  | ok
+[ 123/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | off_topic            | k=3 short | ok
+[ 124/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | off_topic            | k=3 long  | ok
+[ 125/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | off_topic            | k=5 short | ok
+[ 126/270] DeepSeek-R1-Distill-Qwen | math500_test_algebra_2427.json | off_topic            | k=5 long  | ok
+[ 127/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | incorrect_reasoning  | k=1 short | ok
+[ 128/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | incorrect_reasoning  | k=1 long  | ok
+[ 129/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | incorrect_reasoning  | k=3 short | ok
+[ 130/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | incorrect_reasoning  | k=3 long  | ok
+[ 131/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | incorrect_reasoning  | k=5 short | ok
+[ 132/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | incorrect_reasoning  | k=5 long  | ok
+[ 133/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | paraphrased_shift    | k=1 short | ok
+[ 134/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | paraphrased_shift    | k=1 long  | ok
+[ 135/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | paraphrased_shift    | k=3 short | ok
+[ 136/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | paraphrased_shift    | k=3 long  | ok
+[ 137/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | paraphrased_shift    | k=5 short | ok
+[ 138/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | paraphrased_shift    | k=5 long  | ok
+[ 139/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | off_topic            | k=1 short | ok
+[ 140/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | off_topic            | k=1 long  | ok
+[ 141/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | off_topic            | k=3 short | ok
+[ 142/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | off_topic            | k=3 long  | ok
+[ 143/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | off_topic            | k=5 short | ok
+[ 144/270] DeepSeek-R1-Distill-Qwen | math500_test_counting_and_probability_1003.json | off_topic            | k=5 long  | ok
+[ 145/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | incorrect_reasoning  | k=1 short | ok
+[ 146/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | incorrect_reasoning  | k=1 long  | ok
+[ 147/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | incorrect_reasoning  | k=3 short | ok
+[ 148/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | incorrect_reasoning  | k=3 long  | ok
+[ 149/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | incorrect_reasoning  | k=5 short | ok
+[ 150/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | incorrect_reasoning  | k=5 long  | ok
+[ 151/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | paraphrased_shift    | k=1 short | ok
+[ 152/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | paraphrased_shift    | k=1 long  | ok
+[ 153/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | paraphrased_shift    | k=3 short | ok
+[ 154/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | paraphrased_shift    | k=3 long  | ok
+[ 155/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | paraphrased_shift    | k=5 short | ok
+[ 156/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | paraphrased_shift    | k=5 long  | ok
+[ 157/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | off_topic            | k=1 short | ok
+[ 158/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | off_topic            | k=1 long  | ok
+[ 159/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | off_topic            | k=3 short | ok
+[ 160/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | off_topic            | k=3 long  | ok
+[ 161/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | off_topic            | k=5 short | ok
+[ 162/270] DeepSeek-R1-Distill-Qwen | math500_test_geometry_538.json | off_topic            | k=5 long  | ok
+[ 163/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | incorrect_reasoning  | k=1 short | ok
+[ 164/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | incorrect_reasoning  | k=1 long  | ok
+[ 165/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | incorrect_reasoning  | k=3 short | ok
+[ 166/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | incorrect_reasoning  | k=3 long  | ok
+[ 167/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | incorrect_reasoning  | k=5 short | ok
+[ 168/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | incorrect_reasoning  | k=5 long  | ok
+[ 169/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | paraphrased_shift    | k=1 short | ok
+[ 170/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | paraphrased_shift    | k=1 long  | ok
+[ 171/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | paraphrased_shift    | k=3 short | ok
+[ 172/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | paraphrased_shift    | k=3 long  | ok
+[ 173/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | paraphrased_shift    | k=5 short | ok
+[ 174/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | paraphrased_shift    | k=5 long  | ok
+[ 175/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | off_topic            | k=1 short | ok
+[ 176/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | off_topic            | k=1 long  | ok
+[ 177/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | off_topic            | k=3 short | ok
+[ 178/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | off_topic            | k=3 long  | ok
+[ 179/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | off_topic            | k=5 short | ok
+[ 180/270] DeepSeek-R1-Distill-Qwen | math500_test_number_theory_483.json | off_topic            | k=5 long  | ok
+[ 181/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | incorrect_reasoning  | k=1 short | ok
+[ 182/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | incorrect_reasoning  | k=1 long  | ok
+[ 183/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | incorrect_reasoning  | k=3 short | ok
+[ 184/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | incorrect_reasoning  | k=3 long  | ok
+[ 185/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | incorrect_reasoning  | k=5 short | ok
+[ 186/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | incorrect_reasoning  | k=5 long  | ok
+[ 187/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | paraphrased_shift    | k=1 short | ok
+[ 188/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | paraphrased_shift    | k=1 long  | ok
+[ 189/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | paraphrased_shift    | k=3 short | ok
+[ 190/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | paraphrased_shift    | k=3 long  | ok
+[ 191/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | paraphrased_shift    | k=5 short | ok
+[ 192/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | paraphrased_shift    | k=5 long  | ok
+[ 193/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | off_topic            | k=1 short | ok
+[ 194/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | off_topic            | k=1 long  | ok
+[ 195/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | off_topic            | k=3 short | ok
+[ 196/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | off_topic            | k=3 long  | ok
+[ 197/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | off_topic            | k=5 short | ok
+[ 198/270] DeepSeek-R1-Distill-Qwen | scibench_diff_307    | off_topic            | k=5 long  | ok
+[ 199/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | incorrect_reasoning  | k=1 short | ok
+[ 200/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | incorrect_reasoning  | k=1 long  | ok
+[ 201/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | incorrect_reasoning  | k=3 short | ok
+[ 202/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | incorrect_reasoning  | k=3 long  | ok
+[ 203/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | incorrect_reasoning  | k=5 short | ok
+[ 204/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | incorrect_reasoning  | k=5 long  | ok
+[ 205/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | paraphrased_shift    | k=1 short | ok
+[ 206/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | paraphrased_shift    | k=1 long  | ok
+[ 207/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | paraphrased_shift    | k=3 short | ok
+[ 208/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | paraphrased_shift    | k=3 long  | ok
+[ 209/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | paraphrased_shift    | k=5 short | ok
+[ 210/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | paraphrased_shift    | k=5 long  | ok
+[ 211/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | off_topic            | k=1 short | ok
+[ 212/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | off_topic            | k=1 long  | ok
+[ 213/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | off_topic            | k=3 short | ok
+[ 214/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | off_topic            | k=3 long  | ok
+[ 215/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | off_topic            | k=5 short | ok
+[ 216/270] DeepSeek-R1-Distill-Qwen | scibench_fund_366    | off_topic            | k=5 long  | ok
+[ 217/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | incorrect_reasoning  | k=1 short | ok
+[ 218/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | incorrect_reasoning  | k=1 long  | ok
+[ 219/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | incorrect_reasoning  | k=3 short | ok
+[ 220/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | incorrect_reasoning  | k=3 long  | ok
+[ 221/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | incorrect_reasoning  | k=5 short | ok
+[ 222/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | incorrect_reasoning  | k=5 long  | ok
+[ 223/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | paraphrased_shift    | k=1 short | ok
+[ 224/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | paraphrased_shift    | k=1 long  | ok
+[ 225/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | paraphrased_shift    | k=3 short | ok
+[ 226/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | paraphrased_shift    | k=3 long  | ok
+[ 227/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | paraphrased_shift    | k=5 short | ok
+[ 228/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | paraphrased_shift    | k=5 long  | ok
+[ 229/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | off_topic            | k=1 short | ok
+[ 230/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | off_topic            | k=1 long  | ok
+[ 231/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | off_topic            | k=3 short | ok
+[ 232/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | off_topic            | k=3 long  | ok
+[ 233/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | off_topic            | k=5 short | ok
+[ 234/270] DeepSeek-R1-Distill-Qwen | scibench_fund_412    | off_topic            | k=5 long  | ok
+[ 235/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | incorrect_reasoning  | k=1 short | ok
+[ 236/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | incorrect_reasoning  | k=1 long  | ok
+[ 237/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | incorrect_reasoning  | k=3 short | ok
+[ 238/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | incorrect_reasoning  | k=3 long  | ok
+[ 239/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | incorrect_reasoning  | k=5 short | ok
+[ 240/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | incorrect_reasoning  | k=5 long  | ok
+[ 241/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | paraphrased_shift    | k=1 short | ok
+[ 242/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | paraphrased_shift    | k=1 long  | ok
+[ 243/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | paraphrased_shift    | k=3 short | ok
+[ 244/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | paraphrased_shift    | k=3 long  | ok
+[ 245/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | paraphrased_shift    | k=5 short | ok
+[ 246/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | paraphrased_shift    | k=5 long  | ok
+[ 247/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | off_topic            | k=1 short | ok
+[ 248/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | off_topic            | k=1 long  | ok
+[ 249/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | off_topic            | k=3 short | ok
+[ 250/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | off_topic            | k=3 long  | ok
+[ 251/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | off_topic            | k=5 short | ok
+[ 252/270] DeepSeek-R1-Distill-Qwen | scibench_stat_538    | off_topic            | k=5 long  | ok
+[ 253/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | incorrect_reasoning  | k=1 short | ok
+[ 254/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | incorrect_reasoning  | k=1 long  | ok
+[ 255/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | incorrect_reasoning  | k=3 short | ok
+[ 256/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | incorrect_reasoning  | k=3 long  | ok
+[ 257/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | incorrect_reasoning  | k=5 short | ok
+[ 258/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | incorrect_reasoning  | k=5 long  | ok
+[ 259/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | paraphrased_shift    | k=1 short | ok
+[ 260/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | paraphrased_shift    | k=1 long  | ok
+[ 261/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | paraphrased_shift    | k=3 short | ok
+[ 262/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | paraphrased_shift    | k=3 long  | ok
+[ 263/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | paraphrased_shift    | k=5 short | ok
+[ 264/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | paraphrased_shift    | k=5 long  | ok
+[ 265/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | off_topic            | k=1 short | ok
+[ 266/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | off_topic            | k=1 long  | ok
+[ 267/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | off_topic            | k=3 short | ok
+[ 268/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | off_topic            | k=3 long  | ok
+[ 269/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | off_topic            | k=5 short | ok
+[ 270/270] DeepSeek-R1-Distill-Qwen | scibench_thermo_649  | off_topic            | k=5 long  | ok
+
+Done. Generated: 270 | Failed: 0 | Output: /root/msc_thesis_experiment/data/injections_generated.jsonl
+=== GPU Preflight (local) ===
+
+[1/4] Data files
+  OK   data/baseline_cots.jsonl (0.3 MB)
+  OK   data/injections_generated.jsonl (1.7 MB)
+  OK   data/experiment_tasks_pilot_gpu.jsonl (0.1 MB)
+
+[2/4] Environment
+  OK   ANTHROPIC_API_KEY set in .env
+
+[3/4] Scope readiness (pilot_gpu_full_factorial, 5/domain)
+  OK   15 tasks | 1350 dialogues planned
+       logic: 5 tasks
+       math: 5 tasks
+       science: 5 tasks
+       k=[1, 3, 5] | length=['short', 'long'] | seeds=5
+
+[4/4] Tests
+  FAIL: pytest
+/root/msc_thesis_experiment/.venv/bin/python: No module named pytest
+
+=== Summary ===
+  NOT READY — 1 error(s). Fix before GPU deploy.
+
+  Likely fix (on GPU after setup_gpu.sh):
+    bash scripts/run_gpu_baseline_prep.sh
+  Fallback (math-only timing, 5 tasks):
+    bash scripts/run_gpu_pilot_math_only.sh
+
+[ABORT] Preflight failed — dialog phase NOT started.
+
+============================================================
+>>> Judge smoke test
+============================================================
+/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/smoke_judge.py --config /root/msc_thesis_experiment/configs/experiment.yaml
+--- Judge smoke test done in 39s
+
+============================================================
+>>> Script 1 baselines (math, limit=10)
+============================================================
+/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/generate_baselines.py --experiment-config /root/msc_thesis_experiment/configs/experiment.yaml --tasks /root/msc_thesis_experiment/data/experiment_tasks_pilot_gpu.jsonl --domain math --limit 10
+--- Script 1 baselines (math, limit=10) done in 49m 2s
+
+============================================================
+>>> Script 1 baselines (science, limit=15)
+============================================================
+/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/generate_baselines.py --experiment-config /root/msc_thesis_experiment/configs/experiment.yaml --tasks /root/msc_thesis_experiment/data/experiment_tasks_pilot_gpu.jsonl --domain science --limit 15
+--- Script 1 baselines (science, limit=15) done in 38m 43s
+
+============================================================
+>>> Script 1 baselines (logic, limit=24)
+============================================================
+/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/generate_baselines.py --experiment-config /root/msc_thesis_experiment/configs/experiment.yaml --tasks /root/msc_thesis_experiment/data/experiment_tasks_pilot_gpu.jsonl --domain logic --limit 24
+--- Script 1 baselines (logic, limit=24) done in 47m 20s
+
+Selected 15 tasks for injections + dialogues:
+  logic: 5 (verified pool: 19)
+  math: 5 (verified pool: 9)
+  science: 5 (verified pool: 9)
+
+============================================================
+>>> Script 2 injections (selected-only)
+============================================================
+/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/generate_injections.py --baselines /root/msc_thesis_experiment/data/baseline_cots.jsonl --tasks /root/msc_thesis_experiment/data/selected_pilot_tasks.jsonl --output /root/msc_thesis_experiment/data/injections_generated.jsonl --k-values 1 3 5 --error-types incorrect_reasoning paraphrased_shift off_topic --length-levels short long
+--- Script 2 injections (selected-only) done in 2h 9m
+
+============================================================
+>>> Preflight gate (must PASS)
+============================================================

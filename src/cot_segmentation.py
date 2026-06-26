@@ -210,6 +210,54 @@ def segment_cot(
     return [raw_text.strip()], "prompt"
 
 
+# Runaway/loop guard: a degenerate trace is either far longer than any genuine
+# solution (step explosion) or repeats (near-)identical steps (generation loop).
+# Used by generate_baselines.py to keep the max(step_count) baseline selection
+# from picking a degenerate-but-correct sample. The solvability vote is untouched.
+DEFAULT_RUNAWAY_MAX_STEPS = 100
+DEFAULT_LOOP_REPEAT_THRESHOLD = 5
+
+
+def _normalize_step_body(step: str) -> str:
+    """Strip the 'Step N:' prefix and collapse whitespace for repeat comparison."""
+    text = re.sub(r"^Step\s+\d+\s*:\s*", "", step, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def detect_degenerate_trace(
+    steps: list[str],
+    *,
+    max_steps: int = DEFAULT_RUNAWAY_MAX_STEPS,
+    loop_repeat_threshold: int = DEFAULT_LOOP_REPEAT_THRESHOLD,
+) -> tuple[bool, str | None]:
+    """
+    Flag runaway/loop traces so they are not chosen as the baseline CoT.
+
+    Returns (is_degenerate, reason). A trace is degenerate when:
+      - step_count > max_steps (step explosion / runaway generation), or
+      - any non-trivial step body repeats >= loop_repeat_threshold times
+        (a generation loop emitting near-identical steps).
+
+    Conservative by design: exact normalized-body repetition only, so legitimate
+    long or backtracking traces (distinct step content) are not flagged.
+    """
+    n = len(steps)
+    if n > max_steps:
+        return True, f"step_count>{max_steps}"
+
+    counts: dict[str, int] = {}
+    for step in steps:
+        body = _normalize_step_body(step)
+        if len(body) < 15:
+            # Ignore trivial/near-empty steps; only substantive repetition is a loop.
+            continue
+        counts[body] = counts.get(body, 0) + 1
+        if counts[body] >= loop_repeat_threshold:
+            return True, f"loop_repeat>={loop_repeat_threshold}"
+
+    return False, None
+
+
 def steps_to_baseline_cot(steps: list[str], final_answer: str | None = None) -> str:
     """
     Rejoin segmented steps into the baseline_cot string stored in baseline_cots.jsonl.

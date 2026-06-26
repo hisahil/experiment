@@ -39,10 +39,80 @@ def _expand_seeds(seeds: list[int] | int | None, n: int) -> list[int | None]:
 
 COLLABORATING_AGENT_TAG = "[Note from collaborating agent]:"
 
+InjectionTagMode = str  # "none" | "collaborating_agent"
+
+
+def _strip_think_tags(text: str) -> str:
+    """Remove accidental think tags so DeepSeek template stripping cannot delete content."""
+    return re.sub(r"</?think>", "", text)
+
+
+def format_injection_text(
+    injection_text: str,
+    *,
+    injection_tag: InjectionTagMode = "none",
+) -> str:
+    """Format a single user-turn injection (plain text by default, no tag)."""
+    if injection_tag == "collaborating_agent":
+        return f"{COLLABORATING_AGENT_TAG}\n{injection_text}"
+    if injection_tag != "none":
+        raise ValueError(f"Unknown injection_tag: {injection_tag!r}")
+    return injection_text
+
 
 def format_collaborating_note(injection_steps: list[str]) -> str:
     body = "\n".join(injection_steps)
     return f"{COLLABORATING_AGENT_TAG}\n{body}"
+
+
+DialogueTurn = tuple[str, str | None]
+"""(user_injection_text, model_response_or_none). None on the final injection turn."""
+
+
+def build_dialogue_messages(
+    problem: str,
+    turn2_content: str,
+    turns: list[DialogueTurn],
+    *,
+    injection_tag: InjectionTagMode = "none",
+) -> list[Message]:
+    """
+    Build an alternating multi-turn dialog for adaptive injection runs.
+
+    Turn 1: user = problem
+    Turn 2: assistant = turn2_content (typically baseline prefix)
+    Then for each (injection, model_response) in turns:
+      user = injection (optionally tagged)
+      assistant = model_response (skipped when None — final injection turn)
+
+    The last turn in ``turns`` must have model_response=None (model generates next).
+    """
+    if not turns:
+        raise ValueError("turns must be non-empty")
+
+    messages: list[Message] = [
+        {"role": "user", "content": problem},
+        {"role": "assistant", "content": _strip_think_tags(turn2_content)},
+    ]
+
+    for i, (injection_text, model_response) in enumerate(turns):
+        is_final = i == len(turns) - 1
+        if is_final and model_response is not None:
+            raise ValueError("Final turn must have model_response=None")
+        if not is_final and model_response is None:
+            raise ValueError(f"Non-final turn {i + 1} requires model_response")
+
+        messages.append({
+            "role": "user",
+            "content": format_injection_text(injection_text, injection_tag=injection_tag),
+        })
+        if model_response is not None:
+            messages.append({
+                "role": "assistant",
+                "content": _strip_think_tags(model_response),
+            })
+
+    return messages
 
 
 def build_perturbed_messages(
@@ -52,6 +122,7 @@ def build_perturbed_messages(
     *,
     reasoning_model: bool = False,
     trace_in_user_turn: bool = False,
+    injection_tag: InjectionTagMode = "collaborating_agent",
 ) -> list[Message]:
     """
     Build the multi-turn dialog for a perturbed run.
@@ -70,10 +141,11 @@ def build_perturbed_messages(
     on the generation turn via add_generation_prompt, so we leave think-handling
     to it rather than injecting tags that the template would strip.
     """
-    # Strip any accidental <think>/<\/think> tags so the DeepSeek template's
-    # content.split('</think>')[-1] stripping cannot delete the prefix.
-    baseline_prefix = re.sub(r"</?think>", "", baseline_prefix)
-    note = format_collaborating_note(injection_steps)
+    baseline_prefix = _strip_think_tags(baseline_prefix)
+    if injection_tag == "collaborating_agent":
+        note = format_collaborating_note(injection_steps)
+    else:
+        note = format_injection_text("\n".join(injection_steps), injection_tag=injection_tag)
 
     # Folding everything into one user turn sidesteps assistant-history handling
     # completely, for cases where even a plain assistant-turn prefix is unwanted.

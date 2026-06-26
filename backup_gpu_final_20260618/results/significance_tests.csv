@@ -1,0 +1,13 @@
+scope,comparison,n_eligible,n_pairs,n_skipped,n_skip_missing_a,n_skip_missing_b,skip_missing_a_detail,skip_missing_b_detail,skip_summary,mean_diff,t_stat,p_value,note
+overall,recovery_natural_vs_stop,270,270,0,0,0,,,,0.3899,15.3019,0.0,
+overall,recovery_all_vs_stop,270,270,0,0,0,,,,0.38,15.0975,0.0,
+overall,clean_vs_stop,270,270,0,0,0,,,,0.717,27.4214,0.0,
+error_type=incorrect_reasoning,recovery_natural_vs_stop,90,90,0,0,0,,,,0.4802,12.0641,0.0,
+error_type=incorrect_reasoning,recovery_all_vs_stop,90,90,0,0,0,,,,0.4667,11.938,0.0,
+error_type=incorrect_reasoning,clean_vs_stop,90,90,0,0,0,,,,0.8156,22.7894,0.0,
+error_type=off_topic,recovery_natural_vs_stop,90,90,0,0,0,,,,0.5165,13.5815,0.0,
+error_type=off_topic,recovery_all_vs_stop,90,90,0,0,0,,,,0.5089,13.4113,0.0,
+error_type=off_topic,clean_vs_stop,90,90,0,0,0,,,,0.8444,24.833,0.0,
+error_type=paraphrased_shift,recovery_natural_vs_stop,90,90,0,0,0,,,,0.1731,3.8165,0.00025,
+error_type=paraphrased_shift,recovery_all_vs_stop,90,90,0,0,0,,,,0.1644,3.6925,0.000382,
+error_type=paraphrased_shift,clean_vs_stop,90,90,0,0,0,,,,0.4911,9.1229,0.0,

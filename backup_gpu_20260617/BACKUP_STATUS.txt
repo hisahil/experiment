@@ -1,0 +1,32 @@
+GPU backup — 2026-06-17 (Script 1+2+3 complete)
+
+Pod: 020gpg3omasfwu @ ssh.runpod.io
+SSH: ssh -tt 020gpg3omasfwu-64410d4f@ssh.runpod.io -i ~/.ssh/deploygpu_ed25519
+
+=== Script 1+2 backup (2026-06-17 ~02:40 local) ===
+Archive: backup_script12.tar.gz (525,532 bytes)
+Method: 33x 16KB base64 chunks
+
+=== Script 3 backup (2026-06-17 ~06:44 local) ===
+Archive: script3/backup_script3.tar.gz (1,278,941 bytes)
+Method: single base64 transfer (whole-file), 2.5s download
+
+Files backed up (Script 3):
+  data/post_injection_runs.jsonl    3,474,617 bytes   900 lines
+  data/complete_dialogues.jsonl     6,490,112 bytes   450 lines
+  data/adaptive_dialogues.jsonl     3,653,615 bytes   450 lines
+  root/gpu_run_script34.log           514,051 bytes
+  results/run_timings.json              1,183 bytes
+  data/judge_raw/baseline/           49 files (unchanged from Script 1+2)
+  data/judge_raw/dialogue/           15 files (NEW from Script 3)
+
+Files backed up (Script 1+2, unchanged):
+  data/baseline_cots.jsonl            253,291 bytes
+  data/baseline_cots_samples.jsonl  1,218,982 bytes
+  data/injections_generated.jsonl   1,661,978 bytes   270 lines
+  data/selected_pilot_tasks.jsonl      13,456 bytes
+  root/gpu_run.log                    163,561 bytes
+
+Verification: all file sizes match pod exactly.
+
+Script 4 status: run still active on pod (tmux gpu_run).

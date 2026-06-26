@@ -13,6 +13,14 @@ FINAL_ANSWER_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Markdown-aware "Final answer:" label, e.g. `**Final answer:**`, `**Final Answer**:`.
+# Requires the colon (so plain prose like "the final answer is unclear" is NOT
+# treated as a labelled answer). The value may follow on the same or the next line.
+FINAL_ANSWER_LABEL_RE = re.compile(
+    r"\*{0,2}\s*final\s*answer\s*\*{0,2}\s*:\s*\*{0,2}",
+    re.IGNORECASE,
+)
+
 BOXED_RE = re.compile(r"\\boxed\{([^}]*)\}")
 NUMERIC_TOKEN_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
 FINAL_NUMERIC_RE = re.compile(
@@ -20,15 +28,52 @@ FINAL_NUMERIC_RE = re.compile(
     re.IGNORECASE,
 )
 LOGIC_FINAL_RE = re.compile(r"final\s*answer\s*:?\s*(.+)$", re.IGNORECASE | re.DOTALL)
+TRUTH_VALUE_FINAL_RE = re.compile(
+    r"final\s*answer\s*:?\s*(.+?)(?:\n|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_TRUTH_VALUE_CANONICAL = {"true", "false", "uncertain"}
+_TRUTH_VALUE_SYNONYMS = {
+    "true": "true",
+    "false": "false",
+    "uncertain": "uncertain",
+    "entailed": "true",
+    "contradicted": "false",
+    "contradiction": "false",
+    "unknown": "uncertain",
+    "cannot be determined": "uncertain",
+    "can not be determined": "uncertain",
+    "undetermined": "uncertain",
+    "not determinable": "uncertain",
+}
 
 
 def extract_final_answer(text: str) -> str | None:
-    match = FINAL_ANSWER_RE.search(text.strip())
+    """Generic 'Final answer:' extractor (domain fallback).
+
+    Handles markdown variants (`**Final answer:**`) and a value placed on the
+    line after the label, stripping surrounding bold markers.
+    """
+    stripped = text.strip()
+    # Prefer the explicit (markdown-aware) "Final answer:" label; the value may be
+    # on the same line or the first non-empty line after it.
+    label_matches = list(FINAL_ANSWER_LABEL_RE.finditer(stripped))
+    if label_matches:
+        tail = stripped[label_matches[-1].end():]
+        for line in tail.splitlines():
+            candidate = line.strip().strip("*").strip().rstrip(". ")
+            if candidate:
+                boxed = extract_boxed(candidate)
+                return boxed.strip() if boxed is not None else candidate
+    match = FINAL_ANSWER_RE.search(stripped)
     if not match:
         return None
-    answer = match.group(1).strip()
-    # Strip trailing punctuation common in model outputs
-    return answer.rstrip(". ")
+    answer = match.group(1).strip().strip("*").strip()
+    answer = answer.rstrip(". ")
+    boxed = extract_boxed(answer)
+    if boxed is not None:
+        return boxed.strip()
+    return answer
 
 
 _MATH_TAIL_WINDOW = 4000
@@ -308,6 +353,34 @@ def _extract_math_answer_from_slice(slice_text: str, *, allow_flow_heuristics: b
     return None
 
 
+# L2: concluding-prose answer fallbacks (only the final 1-3 lines are inspected,
+# so intermediate-reasoning equations are never picked up).
+_PROSE_TUPLE_RE = re.compile(r"\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)")
+_PROSE_NUMBER_RE = re.compile(
+    r"(?:is|are|of|equals?|:)\s+(?:approximately\s+|about\s+|\$)?\s*"
+    r"([-+]?\d+(?:\.\d+)?(?:\s*/\s*\d+)?)\s*%?\s*\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _extract_prose_final_answer(body: str) -> str | None:
+    """L2 last-resort: a coordinate tuple or trailing number/percent in the
+    concluding sentence (e.g. "...point P are (8, -2)", "...rate ... is 10%").
+
+    Restricted to the final non-empty lines so mid-reasoning values are ignored.
+    """
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    for line in reversed(lines[-3:]):
+        tup = _PROSE_TUPLE_RE.search(line)
+        if tup:
+            return re.sub(r"\s+", "", tup.group(0))
+        if len(line) <= 200:
+            num = _PROSE_NUMBER_RE.search(line)
+            if num:
+                return num.group(1).replace(" ", "")
+    return None
+
+
 def _extract_math_answer(text: str) -> str | None:
     """
     Math answer extraction for recovery runs.
@@ -331,12 +404,34 @@ def _extract_math_answer(text: str) -> str | None:
     # No explicit final marker: fall back to tail window with flow heuristics.
     tail = body[-_MATH_TAIL_WINDOW:] if len(body) > _MATH_TAIL_WINDOW else body
     answer = _extract_math_answer_from_slice(tail, allow_flow_heuristics=True)
-    return _normalize_math_extracted(answer) if answer is not None else None
+    if answer is not None:
+        return _normalize_math_extracted(answer)
+
+    # L2: concluding-prose fallback on the post-</think> body.
+    prose = _extract_prose_final_answer(body)
+    if prose is not None:
+        return _normalize_math_extracted(prose)
+
+    # L1: think-block / prefill fallback. The stop prefill ("...the final answer
+    # is \\boxed{") can land *inside* the <think> block; the post-</think>
+    # presentation is then often truncated, so the careful parser above sees no
+    # gradable answer. Recover the last \\boxed{} in the FULL text (think block
+    # included) as a last resort. Only a genuine absence of any \\boxed{} / final
+    # marker yields None (truly ungradable).
+    boxed_all = BOXED_RE.findall(stripped)
+    if boxed_all:
+        return _normalize_math_extracted(boxed_all[-1])
+    return None
 
 
 def _normalize_math_extracted(answer: str) -> str:
     """Normalize LaTeX variants so symbolic grading matches MATH-500 gold."""
-    return answer.replace(r"\dfrac", r"\frac").strip()
+    normalized = answer.replace(r"\dfrac", r"\frac").strip()
+    normalized = normalized.replace("π", r"\pi")
+    boxed = extract_boxed(normalized)
+    if boxed is not None:
+        normalized = boxed.strip()
+    return normalized
 
 
 def _extract_numeric_answer(text: str) -> str | None:
@@ -355,8 +450,46 @@ def _extract_logic_answer(text: str) -> str | None:
     for every Name=role / 'Name is a knight/knave' mention (later wins)."""
     match = LOGIC_FINAL_RE.search(text)
     if match:
-        return match.group(1).strip()
-    return text or None
+        # Strip a leading markdown bold marker (**Final answer:** ...).
+        return match.group(1).strip().lstrip("*").strip()
+    # Also accept a markdown-labelled final answer (value on same or next line).
+    label_matches = list(FINAL_ANSWER_LABEL_RE.finditer(text or ""))
+    if label_matches:
+        tail = (text or "")[label_matches[-1].end():].strip()
+        if tail:
+            return tail.lstrip("*").strip()
+    stripped = (text or "").strip()
+    if not stripped:
+        return None
+    # Truncated completions without a final-answer line must not dump the whole CoT.
+    if len(stripped) > 500 and re.search(r"^Step\s+\d+:", stripped, re.MULTILINE | re.IGNORECASE):
+        return None
+    return stripped
+
+
+def _normalize_truth_value_token(text: str) -> str | None:
+    """Map a parsed final-answer fragment to true/false/uncertain."""
+    cleaned = text.strip().rstrip(".")
+    lowered = cleaned.lower()
+    if lowered in _TRUTH_VALUE_CANONICAL:
+        return lowered
+    if lowered in _TRUTH_VALUE_SYNONYMS:
+        return _TRUTH_VALUE_SYNONYMS[lowered]
+    # Word-boundary match; avoid 'untrue' -> true via substring.
+    for word in ("uncertain", "false", "true"):
+        if re.search(rf"\b{word}\b", lowered):
+            return word
+    return None
+
+
+def _extract_truth_value(text: str) -> str | None:
+    """Extract True/False/Uncertain for JustLogic (truth_value eval_type)."""
+    match = TRUTH_VALUE_FINAL_RE.search(text)
+    candidate = match.group(1).strip() if match else text.strip()
+    canon = _normalize_truth_value_token(candidate)
+    if canon is None:
+        return None
+    return {"true": "True", "false": "False", "uncertain": "Uncertain"}[canon]
 
 
 def extract_domain_answer(text: str, domain: str, eval_type: str | None = None) -> str | None:
@@ -380,6 +513,8 @@ def extract_domain_answer(text: str, domain: str, eval_type: str | None = None) 
         if num is not None:
             return num
     elif domain == "logic":
+        if eval_type == "truth_value":
+            return _extract_truth_value(stripped)
         return _extract_logic_answer(stripped)
     return extract_final_answer(stripped)
 
@@ -414,8 +549,10 @@ def effective_recovery_termination(
     Re-derive recovery_terminated_by from raw_output (Script 4 / regrade path).
 
     Uses the current extract_domain_answer() implementation so parser fixes
-    apply to historical JSONL without re-running GPU inference. When extraction
-    succeeds, token_limit is inferred from tokens_generated >= recovery_max_tokens.
+    apply to historical JSONL without re-running GPU inference. Classification is
+    delegated to classify_recovery_termination() so the write-time and regrade
+    paths share a single rule and cannot diverge (e.g. finish_reason == "length"
+    is honored in both).
     """
     if run.get("variant") != "recovery":
         return None
@@ -427,17 +564,44 @@ def effective_recovery_termination(
         run.get("domain", "math"),
         run.get("eval_type"),
     )
-    if extracted is None:
-        return "extraction_failed"
-    tokens = int(run.get("tokens_generated") or 0)
-    if tokens >= recovery_max_tokens:
-        return "token_limit"
-    return "natural"
+    return classify_recovery_termination(
+        finish_reason=run.get("finish_reason"),
+        extracted_answer=extracted,
+        max_new_tokens=recovery_max_tokens,
+        completion_tokens=int(run.get("tokens_generated") or 0),
+    )
+
+
+def gross_numeric_mismatch(
+    parsed_answer: object,
+    gold_answer: object,
+    *,
+    threshold: float = 0.5,
+) -> bool:
+    """
+    True when parsed_answer and gold_answer are both numeric and differ by more
+    than `threshold` relative to |gold|.
+
+    Single source of truth for the math sanity gate shared by Script 1
+    (generate_baselines.py baseline verification) and Script 4
+    (evaluate.py _apply_math_sanity_gate). Returns False for non-numeric answers
+    (tuples, expressions, logic) and gold == 0, so the LLM judge stays primary in
+    every case except a clear order-of-magnitude numeric error (e.g. 800 vs 28800).
+    """
+    try:
+        return (
+            abs(float(parsed_answer) - float(gold_answer)) / abs(float(gold_answer))
+            > threshold
+        )
+    except (TypeError, ValueError, ZeroDivisionError):
+        return False
 
 
 def normalize_answer(answer: str, eval_type: str) -> str:
-    text = answer.strip().lower()
+    text = answer.strip()
     if eval_type in {"numeric", "symbolic"}:
+        text = text.replace("π", r"\pi")
+        text = text.lower()
         text = text.replace(",", "").replace("$", "").replace("%", "")
         text = re.sub(r"\s+", "", text)
         if eval_type == "numeric":
@@ -451,7 +615,7 @@ def normalize_answer(answer: str, eval_type: str) -> str:
             except ValueError:
                 nums = re.findall(r"-?\d+\.?\d*", text)
                 return nums[0] if nums else text
-    return re.sub(r"\s+", " ", text)
+    return re.sub(r"\s+", " ", text.lower())
 
 
 def _to_float(value: str) -> float | None:
@@ -481,7 +645,7 @@ def numeric_close(pred: float, gold: float, tolerance: float = 1e-4) -> bool:
 
 
 def _normalize_latex_for_sympy(text: str) -> str:
-    expr = text.strip()
+    expr = text.strip().replace("π", "pi")
     expr = re.sub(r"\\text\{([^}]*)\}", r"\1", expr)
     expr = expr.replace(r"\pi", "pi")
     expr = expr.replace(r"\cdot", "*")
@@ -643,6 +807,12 @@ def is_correct(
 ) -> bool | None:
     if parsed_answer is None:
         return None
+    if eval_type == "truth_value":
+        pred = _normalize_truth_value_token(parsed_answer)
+        gold = _normalize_truth_value_token(gold_answer)
+        if pred is None or gold is None:
+            return None
+        return pred == gold
     if eval_type == "logic":
         equiv = logic_equivalent(parsed_answer, gold_answer)
         if equiv is not None:
@@ -679,16 +849,16 @@ def infer_math_eval_type(gold_answer: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# UNUSED / DEAD CODE -- nicht in der Pipeline aufgerufen (Stand: Juni 2026).
-# Die aktive REI-Berechnung lebt in scripts/evaluate.py (compute_rei, L451),
-# die ueber _mean() None/NaN korrekt ueberspringt und nur variant=="recovery"
-# aggregiert. Die beiden Funktionen unten bleiben nur als Referenz erhalten.
-# Bekannte Schwaechen (NICHT als Vorlage uebernehmen):
-#   - aggregate_rei: `1.0 if record.get("correct") else 0.0` wertet correct=None
-#     als falsch statt es auszuschliessen.
-#   - aggregate_rei: Variant-Filter laesst "stop" durch und verlaesst sich auf
-#     fehlendes _paired_stop.
-# Vor erneuter Nutzung pruefen oder loeschen.
+# UNUSED / DEAD CODE — not called by the pipeline (as of June 2026).
+# Active REI computation lives in scripts/evaluate.py (compute_rei, L451),
+# which skips None/NaN via _mean() and aggregates variant=="recovery" only.
+# The two functions below are kept for reference only.
+# Known weaknesses (do NOT copy as a template):
+#   - aggregate_rei: `1.0 if record.get("correct") else 0.0` treats correct=None
+#     as wrong instead of excluding it.
+#   - aggregate_rei: variant filter lets "stop" through and relies on missing
+#     _paired_stop.
+# Review or delete before reuse.
 # ---------------------------------------------------------------------------
 def compute_rei(
     accuracy_recovery: float,

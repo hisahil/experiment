@@ -1,4 +1,4 @@
-error_type,n_stop_runs,corruption_rate,threshold,below_threshold
-incorrect_reasoning,63,0.8413,0.7,False
-off_topic,63,0.8889,0.6,False
-paraphrased_shift,63,0.6825,0.5,False
+error_type,n_stop_runs,n_ungradable,corruption_rate,threshold,below_threshold
+incorrect_reasoning,450,0,0.8533,0.7,False
+off_topic,450,0,0.8822,0.6,False
+paraphrased_shift,450,0,0.52,0.5,False

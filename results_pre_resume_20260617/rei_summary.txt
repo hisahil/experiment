@@ -1,0 +1,45 @@
+========================================================================
+REI SUMMARY — Experiment 1: Perturbed Chain-of-Thought
+========================================================================
+
+Clean accuracy source: baseline_cots.jsonl (no clean variant in perturbed_runs).
+Primary REI uses recovery_terminated_by == 'natural' (rei_natural).
+min_denominator_tokens=10 | min_recovery_seeds=2 | min_valid_tasks=60
+
+REI (natural, PRIMARY): mean=0.000116  range=[-0.003788, 0.001029]  n=27
+REI (all recovery): mean=0.000043  range=[-0.003788, 0.000883]  n=27
+Accuracy Drop: mean=0.8276  range=[0.3333, 1.0000]  n=27
+Recovery Rate (natural): mean=0.4525  range=[0.0000, 1.0000]  n=27
+
+REI (natural) by error_type:
+  incorrect_reasoning     : mean=0.000294  n_conditions=9
+  off_topic               : mean=-0.000104  n_conditions=9
+  paraphrased_shift       : mean=0.000157  n_conditions=9
+
+REI (natural) by domain:
+  logic                   : mean=0.000569  n_conditions=9
+  math                    : mean=0.000045  n_conditions=9
+  science                 : mean=-0.000267  n_conditions=9
+
+Recovery Rate (natural) by difficulty bin (per task-condition):
+  easy      : mean=0.5464  n=97
+
+Overthinking (recovery termination breakdown):
+  extraction_failed : n=70   frac=0.3704  acc=0.0  tokens=2838.13
+  natural           : n=117  frac=0.619  acc=0.5726  tokens=1724.65
+  token_limit       : n=2    frac=0.0106  acc=0.5  tokens=8192.0
+  ALL               : n=189  frac=1.0  acc=0.3598  tokens=2205.49
+
+Sanity checks (corruption rate on stop rows):
+  incorrect_reasoning     : corruption_rate=0.8413 (thresh=0.7, n=63)
+  off_topic               : corruption_rate=0.8889 (thresh=0.6, n=63)
+  paraphrased_shift       : corruption_rate=0.6825 (thresh=0.5, n=63)
+
+Significance tests (paired t-test, overall):
+  recovery_natural_vs_stop    : n_pairs=117 mean_diff=0.4017  t=7.3885  p=0.0
+  recovery_all_vs_stop        : n_pairs=189 mean_diff=0.164  t=3.6459  p=0.000345
+  clean_vs_stop               : n_pairs=189 mean_diff=0.8042  t=27.7907  p=0.0
+
+WARNING: 27 condition(s) have rei_natural_n_valid < min_valid_tasks=60 (pilot-scale; interpret with care).
+
+========================================================================

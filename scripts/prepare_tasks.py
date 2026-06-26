@@ -15,18 +15,21 @@ Selection methodology (per domain, seed from configs/datasets.yaml, default 42):
   math    — MATH-500 test split; filter Level 4/5; random sample without
             replacement (np.random.RandomState). No subtopic stratification.
   science — SciBench; shuffle all rows; take first N with non-empty gold.
-  logic   — Knights-and-Knaves test files; balanced buckets over n_people
-            (see load_knights_knaves.build_kk_tasks). Optional (enabled flag).
+  logic   — Knights-and-Knaves + JustLogic (optional, enabled flag); balanced
+            over 3 difficulty buckets per source (n_people / depth tiers); equal
+            max_examples per source (see load_knights_knaves, load_justlogic).
 
-Note: logic bucket balance built here can be diluted when a scope caps
-max_per_domain below the pool size (see experiment_scope.select_tasks).
+Note: logic bucket balance built here can be preserved when a scope caps
+max_per_domain below pool size via experiment_scope hierarchical sampling.
 
 Output JSONL schema (one JSON object per line):
   task_id        — unique key across Scripts 1–4
   domain         — math | science | logic; filtered by experiment_scope
+  level          — math only: MATH-500 difficulty level 1..5 (int); else absent
+  subject        — math only: MATH-500 subject (e.g. Algebra); else absent
   prompt         — task text sent to the experiment model (Scripts 1–3)
   gold_answer    — reference answer; Scripts 1/3/4 grade via is_correct()
-  eval_type      — grading rule: symbolic (math), numeric (SciBench), logic (K&K)
+  eval_type      — symbolic (math), numeric (SciBench), logic (K&K), truth_value (JustLogic)
   decoy_answer   — plausible wrong answer for Script 2 (Claude injections)
   source_dataset — benchmark origin label (e.g. math500, scibench/atkins)
   source_id      — id within the source dataset (traceability)
@@ -55,6 +58,7 @@ from math_utils import (  # noqa: E402
     parse_math500_gold,
 )
 from load_knights_knaves import build_kk_tasks  # noqa: E402
+from load_justlogic import build_justlogic_tasks  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -107,66 +111,110 @@ def _math500_level_num(level: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _math500_row(row: dict, gold: str, decoy_rng: random.Random) -> dict:
+    """Build one output task dict from a MATH-500 row (adds level + subject)."""
+    unique_id = str(row["unique_id"])
+    return {
+        "task_id": math500_task_id(unique_id),
+        "domain": "math",
+        "level": _math500_level_num(row.get("level", "")),
+        "subject": str(row.get("subject", "")).strip(),
+        "prompt": str(row["problem"]).strip(),
+        "gold_answer": gold,
+        "eval_type": "symbolic",
+        "source_dataset": "math500",
+        "source_id": unique_id,
+        "decoy_answer": math_decoy(gold, decoy_rng),
+    }
+
+
 def sample_math500(cfg: dict, seed: int) -> list[dict]:
     """
     Build math-domain rows from HuggingFaceH4/MATH-500 (test split).
 
-    Steps:
-      1. Filter to configured levels (default 4 and 5 — harder problems only).
-      2. Assert the filtered pool is large enough for max_examples.
-      3. Drop rows with empty gold after parse_math500_gold (ungradable).
-      4. Draw max_examples indices without replacement (fixed seed).
-      5. Parse gold from answer/solution; attach math_decoy for Script 2.
+    Two modes (controlled by domains.math.stratified):
+      * Flat (default): filter to configured levels, draw max_examples without
+        replacement.
+      * Stratified (stratified: true): draw per_level tasks from EACH configured
+        level so the candidate pool is balanced across difficulty. Used for the
+        intersection task-selection (per_level=40, levels=[1..5] => 200 tasks).
 
-    Example (max_examples=80, levels=[4,5], seed=42):
-      ~312 Level-4/5 rows in pool → 80 chosen → task_id like math500_test_algebra_529.json
+    Every output row carries `level` (int) and `subject` (str) for downstream
+    level-stratified analysis and intersection sampling.
     """
     ds_cfg = cfg["domains"]["math"]
     ds = load_hf_dataset(ds_cfg)
-    levels = set(ds_cfg.get("levels", [4, 5]))
+    levels = list(ds_cfg.get("levels", [4, 5]))
+    level_set = set(levels)
 
-    # Eligibility filter: deliberate difficulty cap, not random noise.
-    filtered: list[dict] = []
+    # Group eligible rows (non-empty gold) by difficulty level.
+    by_level: dict[int, list[tuple[dict, str]]] = {lv: [] for lv in level_set}
     for row in ds:
         level_num = _math500_level_num(row.get("level", ""))
-        if level_num in levels:
-            filtered.append(row)
-
-    eligible: list[tuple[dict, str]] = []
-    for row in filtered:
+        if level_num not in level_set:
+            continue
         gold = parse_math500_gold(str(row.get("answer", "")), str(row.get("solution", "")))
         if not gold.strip():
             continue
-        eligible.append((row, gold))
+        by_level[level_num].append((row, gold))
 
+    decoy_rng = random.Random(seed)
+    rows: list[dict] = []
+
+    if ds_cfg.get("stratified", False):
+        per_level_cfg = ds_cfg["per_level"]
+        # per_level may be an int (uniform across levels) or a dict mapping
+        # level -> count. A count of "all" (or any value >= the level pool size)
+        # means: take the ENTIRE pool for that level. This is used to maximise the
+        # hard Level-5 yield in one pass (no iterative backfill needed).
+        # Deterministic per-level draw: derive a distinct seed per level so the
+        # draw is reproducible and independent across levels.
+        for lv in sorted(level_set):
+            pool = by_level[lv]
+            if isinstance(per_level_cfg, dict):
+                # YAML dict keys may be parsed as int or str; accept both.
+                raw = per_level_cfg.get(lv, per_level_cfg.get(str(lv)))
+                if raw is None:
+                    raise ValueError(
+                        f"stratified per_level dict has no entry for Level {lv}."
+                    )
+            else:
+                raw = per_level_cfg
+            if isinstance(raw, str) and raw.strip().lower() == "all":
+                want = len(pool)
+            else:
+                want = int(raw)
+            if want > len(pool):
+                print(
+                    f"[WARN] MATH-500 Level {lv}: requested {want} but only "
+                    f"{len(pool)} gradable rows available; taking all {len(pool)}.",
+                    file=sys.stderr,
+                )
+                want = len(pool)
+            if want <= 0:
+                raise ValueError(
+                    f"per_level for Level {lv} resolved to {want} (must be > 0)."
+                )
+            rng = np.random.RandomState(seed + lv)
+            chosen = rng.choice(len(pool), size=want, replace=False)
+            for idx in chosen:
+                row, gold = pool[int(idx)]
+                rows.append(_math500_row(row, gold, decoy_rng))
+        return rows
+
+    # Flat mode (legacy): single draw across all eligible levels.
+    eligible: list[tuple[dict, str]] = [pair for lv in level_set for pair in by_level[lv]]
     max_examples = int(ds_cfg["max_examples"])
     if len(eligible) < max_examples:
         raise ValueError(
-            f"MATH-500 level {sorted(levels)} pool has {len(eligible)} rows with non-empty gold; "
+            f"MATH-500 level {sorted(level_set)} pool has {len(eligible)} rows with non-empty gold; "
             f"need at least {max_examples}."
         )
-
-    # np RandomState for index draw; separate random.Random for decoy variation.
     rng = np.random.RandomState(seed)
     chosen = rng.choice(len(eligible), size=max_examples, replace=False)
-
-    rows: list[dict] = []
-    decoy_rng = random.Random(seed)
     for idx in chosen:
         row, gold = eligible[int(idx)]
-        unique_id = str(row["unique_id"])
-        rows.append(
-            {
-                "task_id": math500_task_id(unique_id),
-                "domain": "math",
-                "prompt": str(row["problem"]).strip(),
-                "gold_answer": gold,
-                "eval_type": "symbolic",
-                "source_dataset": "math500",
-                "source_id": unique_id,
-                "decoy_answer": math_decoy(gold, decoy_rng),
-            }
-        )
+        rows.append(_math500_row(row, gold, decoy_rng))
     return rows
 
 
@@ -248,26 +296,31 @@ def sample_science(cfg: dict, rng: random.Random) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Logic domain — Knights-and-Knaves (optional, exact logic grading)
+# Logic domain — Knights-and-Knaves + JustLogic (optional)
 # ---------------------------------------------------------------------------
 
 
 def sample_logic(cfg: dict, rng: random.Random) -> list[dict]:
     """
-    Optional logic domain (Knights-and-Knaves). Returns [] when disabled.
+    Optional logic domain (K&K + JustLogic). Returns [] when disabled.
 
-    Delegates to build_kk_tasks() in load_knights_knaves.py, which:
-      - loads test JSONL files per n_people bucket (3, 4, 5 characters),
-      - draws an equal number of puzzles per bucket (balanced difficulty),
-      - sets eval_type=logic and a canonical gold/decoy role assignment.
+    Each source uses max_examples // 3 tasks per difficulty bucket:
+      K&K        — n_people 3/4/5 (eval_type=logic)
+      JustLogic  — depth tiers low/mid/high (eval_type=truth_value)
 
-    Rows may include n_people for traceability; experiment_scope caps tasks
-    per domain without re-balancing buckets (pilot_gpu: 8 of 24).
+    Set equal max_examples on both sub-sources for a 50/50 logic pool.
     """
     ds_cfg = cfg["domains"].get("logic")
     if not ds_cfg or not ds_cfg.get("enabled", False):
         return []
-    return build_kk_tasks(ds_cfg, rng)
+    rows: list[dict] = []
+    kk_cfg = ds_cfg.get("knights_knaves")
+    if kk_cfg and kk_cfg.get("enabled", True):
+        rows.extend(build_kk_tasks(kk_cfg, rng))
+    jl_cfg = ds_cfg.get("justlogic")
+    if jl_cfg and jl_cfg.get("enabled", True):
+        rows.extend(build_justlogic_tasks(jl_cfg, rng))
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -284,19 +337,32 @@ def main() -> None:
         default=None,
         help="Override output JSONL path (default: value of output in config).",
     )
+    parser.add_argument(
+        "--domains",
+        type=str,
+        nargs="+",
+        choices=["math", "science", "logic"],
+        default=None,
+        help="Restrict pool to these domains (default: all configured). "
+        "Use '--domains math' for the stratified intersection candidate pool.",
+    )
     args = parser.parse_args()
 
     cfg = load_yaml(args.config)
     seed = int(cfg.get("seed", 42))
     rng = random.Random(seed)
     out_path = args.output if args.output is not None else ROOT / cfg["output"]
+    selected = set(args.domains) if args.domains else {"math", "science", "logic"}
 
     try:
         # Stage 0 pool: math + science + logic (if enabled). Order is stable for logging.
         rows: list[dict] = []
-        rows.extend(sample_math(cfg, rng, seed))
-        rows.extend(sample_science(cfg, rng))
-        rows.extend(sample_logic(cfg, rng))
+        if "math" in selected:
+            rows.extend(sample_math(cfg, rng, seed))
+        if "science" in selected:
+            rows.extend(sample_science(cfg, rng))
+        if "logic" in selected:
+            rows.extend(sample_logic(cfg, rng))
     except ImportError:
         print("Install datasets: pip install datasets", file=sys.stderr)
         sys.exit(1)

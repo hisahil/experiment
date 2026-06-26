@@ -1,8 +1,17 @@
 # Experiment 1 — Scripts 1–4 pipeline (scope limits control pilot vs full run)
 #
+# One-command pipeline (stages 0–4 + grid validation):
+#   python scripts/run_pipeline.py --scope pilot_gpu --dry-run
+#   python scripts/run_pipeline.py --scope pilot_gpu
+# Grid check only:
+#   python scripts/validate_grid.py --scope pilot_gpu --kind all
+#
+# Manual stages (fallback):
 # GPU pilot:  python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu
 # Full:       set active_scope: full (or --scope full), then Scripts 1–4 in order
 # Dry-run:    add --dry-run to any script; use --limit N for small local checks
+#
+# Default factorial axes are defined in src/experiment_design.py (YAML design: block must match).
 
 experiment:
   name: exp1_perturbed_cot
@@ -15,10 +24,13 @@ experiment:
 #   script3.backend: transformers
 # ──────────────────────────────────────────────────────────────────────
 model:
-  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  # Set to 7B for the fast 7B full run (full_math). Switch to the 14B/32B
+  # checkpoint (and script3.baseline_file below) to run those models on the
+  # SAME tasks/injections later — model name is the only per-model change.
+  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
   backend: vllm
   dtype: auto
-  max_new_tokens: 2048
+  max_new_tokens: 12288
   temperature: 0.6
   top_p: 0.95
   # vLLM KV-cache fit on A100 80GB: the 32B weights take ~61GB, so the model's
@@ -41,19 +53,38 @@ baseline:
   min_steps: 3
 
 # Perturbed CoT runs (Script 3) — python scripts/run_perturbed.py
+# Adaptive alternating dialogues (Script 3b) — python scripts/run_adaptive_dialogue.py
 script3:
-  baseline_file: data/baseline_cots.jsonl
+  # Per-model baselines (100 curated tasks each). Switch to baselines/14b or
+  # baselines/32b together with model.name above for those model runs.
+  baseline_file: data/baselines/7b/baseline_cots.jsonl
   injections_file: data/injections_generated.jsonl
   # Experiment-model runs after Claude injection (stop/recovery outputs only, not the dialog).
   # Inputs to build that dialog: baseline_file + injections_file. Schema: run_perturbed.py docstring.
   output_file: data/post_injection_runs.jsonl
+  adaptive_dialogues_file: data/adaptive_dialogues.jsonl
+  complete_dialogues_file: data/complete_dialogues.jsonl
+  # three_turn = legacy bundled injection (run_perturbed.py)
+  # adaptive_alternating = multi-turn with real intermediate generations (run_adaptive_dialogue.py)
+  dialogue_mode: adaptive_alternating
+  injection_tag: none
+  turn2_source: baseline_prefix
+  adaptive_from_injection: 2
+  intermediate_max_tokens: auto
+  format_effect_threshold_pp: 5.0
+  neutral_control_subset:
+    enabled: false
+    seeds: [42]
   variants: [stop, recovery]
   recovery_max_tokens: 8192
-  # Stop = rapid-response regime: genug fuer kurze Antwort, zu wenig fuer
-  # volle Neuberechnung. Recovery bleibt unconstrained (recovery_max_tokens).
-  # REI = (acc_recovery - acc_stop) / (tokens_recovery - tokens_stop) wird
-  # damit sauber interpretierbar.
-  stop_max_new_tokens: 100
+  # Stop = rapid-response regime: enough for a short answer, too little for full
+  # recomputation. Recovery stays unconstrained (recovery_max_tokens).
+  # REI = (acc_recovery - acc_stop) / (tokens_recovery - tokens_stop) is then
+  # cleanly interpretable.
+  stop_max_new_tokens: 500  # was 100; raised after pilot truncation analysis (256 empty stop answers).
+  # Per-row stop_max_new_tokens/recovery_max_tokens are stored in each output record
+  # (run_adaptive_dialogue.py / run_perturbed.py) so Script 4 classifies truncation per row.
+  # Old rows lacking the field default to 100/8192 in scripts/evaluate.py.
   # The baseline prefix is placed as PLAIN VISIBLE TEXT in the assistant turn
   # (NOT wrapped in <think> tags). DeepSeek-R1-Distill's chat template strips
   # everything before </think> in history turns (content.split('</think>')[-1]),
@@ -85,6 +116,23 @@ injection:
   model: claude-sonnet-4-6   # Claude Sonnet 4.6; NOT one of the 3 experiment models
   placement: midpoint               # inject at floor(n/2) of baseline CoT
   generated_file: data/injections_generated.jsonl
+  # How many injection steps Script 2 pre-generates per cell.
+  # Adaptive dialogues (script3.dialogue_mode: adaptive_alternating) consume only
+  # injection_steps[0]; rounds 2..k are generated live in Script 3b, so a single
+  # pre-generated step is enough (auto -> 1). Legacy three_turn injects all k steps
+  # bundled in Turn 3 (auto -> k). Override with 1 or k for tests.
+  pregenerate_steps: auto   # auto | 1 | k
+
+# LLM-as-a-Judge grading (Scripts 1, 3, 4 — primary verifier)
+judge:
+  provider: anthropic
+  model: claude-sonnet-4-6   # must match injection.model
+  temperature: 0
+  max_tokens: 200
+  max_retries: 3
+  enabled: true
+  raw_log_dir: data/judge_raw
+  raw_log_enabled: true
 
 # Full factorial design (what the thesis measures)
 # Exactly three error types are used. incorrect_reasoning also covers
@@ -135,7 +183,28 @@ scopes:
     k_injections: [1, 3, 5]
     length_levels: [short, long]
     seeds: [42, 43, 44, 45, 46]
-  # GPU pilot — reduced design on the MATH-500 + SciBench (+ optional K&K) pool.
+  # Math-only full run on the stratified-intersection task set (100 tasks, 20/level,
+  # all verified by 7B/14B/32B). Build the task set first:
+  #   python scripts/prepare_tasks.py --config configs/datasets.yaml --domains math \
+  #     --output data/experiment_tasks_stratified.jsonl
+  #   (run Script 1 for 7B/14B/32B on the stratified pool)
+  #   python scripts/build_intersection_tasks.py --pool data/experiment_tasks_stratified.jsonl \
+  #     --baselines data/baseline_cots.jsonl --out data/experiment_tasks.jsonl
+  # Dialogues per model: 100 x 3 error_types x 3 k x 2 length x 3 seeds = 5,400.
+  # Switch model.name to 7B / 14B / 32B between runs.
+  full_math:
+    description: "Math-only full run: 100 intersection tasks (20/level), k{1,3,5}, short+long, 3 seeds, adversarial"
+    tasks: data/experiment_tasks.jsonl
+    max_tasks_total: null
+    max_per_domain:
+      math: 100
+    domains: [math]
+    variants: [stop, recovery]
+    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    k_injections: [1, 3, 5]
+    length_levels: [short, long]
+    seeds: [42, 43, 44]
+  # GPU pilot — reduced design on the MATH-500 + SciBench + logic (K&K + JustLogic) pool.
   # Build pilot pool (math + science + logic; does NOT touch data/experiment_tasks.jsonl):
   #   python scripts/prepare_tasks.py --config configs/datasets.yaml \
   #     --output data/experiment_tasks_pilot_gpu.jsonl
@@ -144,15 +213,14 @@ scopes:
   #   python scripts/run_perturbed.py --config configs/experiment.yaml --scope pilot_gpu_techcheck
   #   python scripts/evaluate.py
   pilot_gpu:
-    description: "GPU pilot: math20/science8/logic8, 3 error types, k{1,3} short, 1 seed, stop+recovery"
+    description: "GPU pilot: math20/science8/logic12 (6 K&K + 6 JustLogic), 3 error types, k{1,3} short, 1 seed, stop+recovery"
     tasks: data/experiment_tasks_pilot_gpu.jsonl   # per-scope override (run_perturbed)
     max_tasks_total: null
     # Per-domain caps (dict form, handled by experiment_scope.select_tasks).
     max_per_domain:
       math: 20
       science: 8
-      logic: 8          # OPTIONAL: set to 0 here, or drop `logic` from `domains`,
-                        # or set domains.logic.enabled: false in datasets.yaml.
+      logic: 12         # 50/50 K&K + JustLogic (6 each); divisible by 2 and 6 for tier balance
     domains: [math, science, logic]
     variants: [stop, recovery]                   # recovery is required for REI
     error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
@@ -164,6 +232,35 @@ scopes:
     # inside this block without also generating k=1/3 long and k=5 short. It is
     # therefore encoded as the sibling scope `pilot_gpu_techcheck` below, run as a
     # second pass; its rows append to the same post_injection_runs.jsonl.
+  # Adaptive alternating dialogues (Script 3b):
+  #   python scripts/run_adaptive_dialogue.py --scope pilot_gpu_adaptive
+  pilot_gpu_adaptive:
+    description: "Adaptive GPU pilot: math20/science8/logic12, k{1,3} short, 1 seed, adversarial+neutral paired"
+    tasks: data/experiment_tasks_pilot_gpu.jsonl
+    max_tasks_total: null
+    max_per_domain:
+      math: 20
+      science: 8
+      logic: 12
+    domains: [math, science, logic]
+    variants: [stop, recovery]
+    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    k_injections: [1, 3]
+    length_levels: [short]
+    seeds: [42]
+    include_neutral_control: true
+  # Mini full-thesis factorial for GPU timing extrapolation (Script 3b):
+  #   python scripts/run_adaptive_dialogue.py --scope pilot_gpu_full_factorial --balanced-per-domain 5
+  pilot_gpu_full_factorial:
+    description: "Full thesis factorial on 5 tasks/domain: k{1,3,5} x short/long x 5 seeds, adversarial only"
+    tasks: data/experiment_tasks_pilot_gpu.jsonl
+    max_tasks_total: null
+    domains: [math, science, logic]
+    variants: [stop, recovery]
+    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    k_injections: [1, 3, 5]
+    length_levels: [short, long]
+    seeds: [42, 43, 44, 45, 46]
   pilot_gpu_techcheck:
     description: "GPU pilot technical check: the single k=5 + long combo (same tasks/domains as pilot_gpu)"
     tasks: data/experiment_tasks_pilot_gpu.jsonl
@@ -171,7 +268,7 @@ scopes:
     max_per_domain:
       math: 20
       science: 8
-      logic: 8
+      logic: 12
     domains: [math, science, logic]
     variants: [stop, recovery]
     error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
@@ -204,11 +301,33 @@ script4:
     easy: 0.70
     hard: 0.40
   # Corruption-rate warning thresholds per error_type (descriptive, NOT gates).
+  # NOTE (D8): paraphrased_shift is a MILD perturbation by construction
+  # (mixed-domain pilot corruption_rate ~0.56, just above 0.5). Expect a floor
+  # effect for recovery_gain there; do not read low recovery as "recovery fails".
   sanity_thresholds:
     incorrect_reasoning: 0.70
     off_topic: 0.60
     paraphrased_shift: 0.50
   math_tolerance: 1.0e-4                         # numeric tolerance for math answers
+  science_tolerance: 1.0e-2                    # numeric tolerance for science (deterministic cross-check)
+  # ── Lean-metrics migration (Phase A/B) ────────────────────────────────
+  # Primary headline metrics (eval_summary.txt + paper). REI is demoted to a
+  # deprecated CSV column; significance is McNemar + Wilson (confirmatory_tests.csv).
+  primary_metrics: [susceptibility, recovery_gain, rter, persistence_rate]
+  summary_filename: eval_summary.txt
+  # Judge-coverage HARD gate (A5): aborts evaluate when judge_fallback rows remain
+  # or the per-k fallback rate is unbalanced (pilot k=3 det-only confound).
+  # Full run requires 100% judge coverage; pilot/backup re-evals leave this false.
+  require_judge_coverage: false   # set true for full_math (after ensure_judge_coverage loop)
+  judge_coverage_max_fallback_rate: 0.0
+  judge_coverage_max_k_imbalance_pp: 5.0
+  # math-only expected ranges (C3) — reference so warnings are not calibrated on
+  # the mixed-domain pilot. Reporting/documentation only; not gates.
+  math_kappa_reference: 0.83            # math-only judge/det kappa (mixed pilot ~0.91)
+  # Expected judge/det disagreement baseline (math-only) ~6-8%; warn fires >15%.
+  # Expected stop corruption_rate (math, 2A prefill) per error_type:
+  #   incorrect_reasoning ~0.85-0.90, off_topic ~0.90, paraphrased_shift ~0.55-0.65.
+  #   (Pilot values are mixed-domain; re-check on the math full run.)
 
 logging:
   save_raw_outputs: true

@@ -1,0 +1,41 @@
+{
+  "phase": "task_selection_3_4",
+  "started_at": "2026-06-21T23:11:15Z",
+  "ended_at": "2026-06-22T05:06:50Z",
+  "started_at_unix": 1782083475.857982,
+  "contingent_tasks": 168,
+  "final_tasks": 100,
+  "baseline_lines": {
+    "7b": 304,
+    "14b": 168,
+    "32b": 168
+  },
+  "elapsed_s": {
+    "contingent": 0.2,
+    "14b": 6950.0,
+    "32b": 14383.9,
+    "intersection": 0.2,
+    "total": 21334.5
+  },
+  "elapsed_fmt": {
+    "14b": "1h 55m",
+    "32b": "3h 59m",
+    "total": "5h 55m"
+  },
+  "elapsed_h": {
+    "14b": 1.931,
+    "32b": 3.996,
+    "total": 5.926
+  },
+  "logs": {
+    "overnight": "data/task_selection/logs/overnight.log",
+    "14b": "data/task_selection/logs/14b.log",
+    "32b": "data/task_selection/logs/32b.log",
+    "intersection": "data/task_selection/logs/intersection.log"
+  },
+  "outputs": {
+    "contingent": "data/task_selection/meta/contingent.jsonl",
+    "experiment_tasks": "data/task_selection/output/experiment_tasks.jsonl",
+    "experiment_tasks_root": "data/experiment_tasks.jsonl"
+  }
+}

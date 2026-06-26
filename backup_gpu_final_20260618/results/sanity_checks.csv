@@ -1,0 +1,4 @@
+error_type,n_stop_runs,n_ungradable,corruption_rate,threshold,below_threshold
+incorrect_reasoning,450,0,0.8822,0.7,False
+off_topic,450,0,0.9111,0.6,False
+paraphrased_shift,450,0,0.5578,0.5,False

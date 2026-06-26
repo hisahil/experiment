@@ -1,0 +1,71 @@
+GPU Final Backup — 2026-06-18
+=============================
+
+Pod: 020gpg3omasfwu @ ssh.runpod.io
+Remote: /root/msc_thesis_experiment
+Local:  backup_gpu_final_20260618/
+Method: SSH heredoc + base64 chunks (500 KB each)
+        19 chunks for data/results tar, 5 for gpu_run_script34.log, 1 for gpu_run.log
+Download completed: 2026-06-18 ~02:44 local (51s transfer time)
+sync_pod_live: STOPPED after final backup (was pid 54520)
+
+=== Critical files (VERIFIED) ===
+
+post_injection_runs.jsonl     10,599,556 bytes   2,700 lines   OK (target: 2700)
+complete_dialogues.jsonl      46,812,149 bytes   1,350 lines   OK (target: 1350 dialogues)
+adaptive_dialogues.jsonl      38,304,908 bytes   1,350 lines   OK
+  → 2700 runs / 1350 dialogues = 2 conditions per dialogue (baseline + adaptive)
+
+baseline_cots.jsonl              253,291 bytes      49 lines
+baseline_cots_samples.jsonl    1,218,982 bytes     270 lines (in tar)
+injections_generated.jsonl     1,661,978 bytes     270 lines
+selected_pilot_tasks.jsonl        13,456 bytes      15 lines
+
+judge_raw/                     64 files, 2.2 MB
+  baseline/  49 files
+  dialogue/  15 files
+
+results/                       11 files (full evaluation output)
+  run_timings.json               1,314 bytes
+  results_per_task.csv          54,680 bytes
+  results_per_condition.csv     19,050 bytes
+  rei_summary.txt                8,835 bytes
+  (+ grading_agreement, disagreements, significance, etc.)
+
+root/gpu_run_script34.log      2,211,164 bytes   6,473 lines
+root/gpu_run.log                 163,561 bytes
+
+Archive: backup_final_data.tar.gz  9,473,418 bytes (matches pod exactly)
+
+=== JSON validation ===
+All 2,700 + 1,350 + 1,350 JSONL lines parse as valid JSON.
+
+=== Comparison with backup_gpu_live ===
+backup_gpu_live/post_injection_runs.jsonl: 2,699 lines (10,600,891 bytes) — 1 line short
+backup_gpu_final/post_injection_runs.jsonl: 2,700 lines (10,599,556 bytes) — matches pod
+
+Final backup is authoritative; live sync was 1 row behind at stop time.
+
+=== Comparison with backup_gpu_20260617 ===
+2026-06-17 Script 3 backup: 900 lines post_injection, 450 dialogues
+2026-06-18 final backup:   2700 lines post_injection, 1350 dialogues
+Grid run COMPLETE (3x growth since last full backup).
+
+=== Pod source timestamps (from pod ls) ===
+post_injection_runs.jsonl, complete_dialogues.jsonl, adaptive_dialogues.jsonl: Jun 18 01:31 UTC
+results/*: Jun 18 01:31 UTC
+gpu_run_script34.log: Jun 18 01:31 UTC
+
+=== Not downloaded (redundant / large) ===
+- math500/ raw task files (unchanged since initial upload)
+- pilot/synthetic jsonl variants
+- backup_gpu_20260617 chunks (prior partial backups retained separately)
+
+2026-06-18T03:13:29Z Added root/setup_gpu.log from RunPod pod (020gpg3omasfwu), 4552 bytes (matches pod /root/setup_gpu.log).
+
+2026-06-18T03:15:00Z Added data/post_injection_runs_synthetic.jsonl from RunPod pod (020gpg3omasfwu).
+  Pod: 60 lines, 23,673 bytes (verified via SYNTH_SIZE on pod).
+  Local backup: backup_gpu_final_20260618/data/post_injection_runs_synthetic.jsonl — byte-identical to pod.
+  Compare: data/post_injection_runs_synthetic.jsonl (same size; cmp identical).
+  Validation: 60 JSONL lines, all valid JSON.
+  Method: SSH -tt heredoc + remote python3 base64 chunks (SYNTH_B64_BEGIN/END).

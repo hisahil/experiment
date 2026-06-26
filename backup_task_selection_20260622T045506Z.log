@@ -1,0 +1,5 @@
+=== auto_download_task_selection start 2026-06-22T04:55:06Z ===
+Pod: 020gpg3omasfwu-64410d4f@ssh.runpod.io
+Dest: /Users/sararoy/msc_thesis_experiment/backup_task_selection_20260622T045506Z
+Poll every 180s, max 7200s
+[04:55:08Z] 

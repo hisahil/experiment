@@ -1,0 +1,589 @@
+source,task_id,domain,model,variant,attempt,seed,verifier_score,det_correct,judge_output,judge_fallback,judge_raw_path,parsed_answer,gold_answer,agree
+baseline_sample,math500_test_counting_and_probability_159.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,5.0,46,1,0,Correct,False,data/judge_raw/baseline/math500_test_counting_and_probability_159.json.jsonl,800,28800,False
+baseline_sample,scibench_fund_412,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,1.0,42,1,0,Correct,False,data/judge_raw/baseline/scibench_fund_412.jsonl,17.76,22.2,False
+baseline_sample,scibench_diff_308,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,1.0,42,1,0,Correct,False,data/judge_raw/baseline/scibench_diff_308.jsonl,1358.7,130.41,False
+baseline_sample,scibench_diff_308,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,4.0,45,1,0,Correct,False,data/judge_raw/baseline/scibench_diff_308.jsonl,36.5,130.41,False
+baseline_sample,scibench_quan_516,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,4.0,45,1,0,Correct,False,data/judge_raw/baseline/scibench_quan_516.jsonl,1900,1855,False
+baseline_sample,scibench_atkins_2,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,1.0,42,1,0,Correct,False,data/judge_raw/baseline/scibench_atkins_2.jsonl,7.425,7.3,False
+baseline_sample,scibench_atkins_2,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,2.0,43,1,0,Correct,False,data/judge_raw/baseline/scibench_atkins_2.jsonl,7.487,7.3,False
+baseline_sample,scibench_atkins_2,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,3.0,44,1,0,Correct,False,data/judge_raw/baseline/scibench_atkins_2.jsonl,7.54,7.3,False
+baseline_sample,scibench_atkins_2,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,4.0,45,1,0,Correct,False,data/judge_raw/baseline/scibench_atkins_2.jsonl,7.39,7.3,False
+baseline_sample,scibench_diff_307,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,2.0,43,1,0,Correct,False,data/judge_raw/baseline/scibench_diff_307.jsonl,0.112,0.2244,False
+baseline_sample,justlogic_3663,logic,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,1.0,42,1,0,Correct,False,data/judge_raw/baseline/justlogic_3663.jsonl,True,False,False
+baseline_sample,justlogic_3663,logic,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,,2.0,43,1,0,Correct,False,data/judge_raw/baseline/justlogic_3663.jsonl,True,False,False
+perturbed_run,justlogic_3347,logic,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,43,1,0,Correct,False,data/judge_raw/dialogue/justlogic_3347.jsonl,True,False,False
+perturbed_run,justlogic_3347,logic,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,1,0,Correct,False,data/judge_raw/dialogue/justlogic_3347.jsonl,Uncertain,False,False
+perturbed_run,kk_p5_24,logic,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,45,1,0,Correct,False,data/judge_raw/dialogue/kk_p5_24.jsonl,"Alright, let's tackle this logic puzzle step by step. So, we have five inhabitants: Emma, Ethan, Charlotte, Grace, and Lucas. Each one is either a knight, who always tells the truth, or a knave, who always lies. We need to figure out who is who based on their statements.
+
+First, let's list out what each person says:
+
+1. Emma says, ""Charlotte is a knight.""
+2. Ethan says, ""Emma is a knave and Grace is a knight.""
+3. Charlotte says, ""Ethan is a knight or Ethan is a knave.""
+4. Grace says, ""If Emma is a knight then Charlotte is a knight.""
+5. Lucas says, ""Charlotte is not a knight.""
+
+Okay, starting with Emma's statement: ""Charlotte is a knight."" If Emma is a knight, then Charlotte must be a knight. If Emma is a knave, then Charlotte is a knave.
+
+Next, Ethan says, ""Emma is a knave and Grace is a knight."" So, if Ethan is a knight, then both parts of his statement must be true: Emma is a knave, and Grace is a knight. If Ethan is a knave, then at least one part of his statement is false. It could be that Emma is a knight, or Grace is a knave, or both.
+
+Charlotte's statement is interesting: ""Ethan is a knight or Ethan is a knave."" Well, since everyone is either a knight or a knave, this statement is always true. It doesn't give us any new information because it's a tautology.
+
+Grace says, ""If Emma is a knight then Charlotte is a knight."" This is a conditional statement. In logic, if the ""if"" part is true, then the ""then"" part must also be true for the statement to hold. If the ""if"" part is false, the statement is automatically true regardless of the ""then"" part.
+
+Finally, Lucas says, ""Charlotte is not a knight."" If Lucas is a knight, then Charlotte is a knave. If Lucas is a knave, then Charlotte is a knight.
+
+Now, let's try to piece this together. Let's consider two scenarios:
+
+**Scenario 1: Emma is a knight.**
+- If Emma is a knight, then Charlotte is a knight (from Emma's statement).
+- Ethan says, ""Emma is a knave and Grace is a knight."" But since Emma is a knight, Ethan's statement is false. Therefore, Ethan is a knave.
+- Grace's statement, ""If Emma is a knight then Charlotte is a knight,"" holds true because both Emma and Charlotte are knights. So, Grace is a knight.
+- Lucas says, ""Charlotte is not a knight."" But Charlotte is a knight, so Lucas is lying. Therefore, Lucas is a knave.
+
+In this scenario, Emma, Charlotte, and Grace are knights, while Ethan and Lucas are knaves. Let's check for consistency:
+- Emma's statement is true.
+- Ethan's statement is false, which aligns with him being a knave.
+- Charlotte's statement is a tautology, so it's fine.
+- Grace's statement is true.
+- Lucas's statement is false, which is consistent with him being a knave.
+
+This scenario seems consistent.
+
+**Scenario 2: Emma is a knave.**
+- If Emma is a knave, then Charlotte is a knave (from Emma's statement).
+- Ethan says, ""Emma is a knave and Grace is a knight."" Since Emma is a knave, the first part is true. For Ethan's entire statement to be true, Grace must also be a knight. If Ethan is a knight, then both parts are true. If Ethan is a knave, then at least one part is false. But since Emma is a knave, the first part is true, so for Ethan to be a knave, Grace must be a knave.
+- Grace's statement, ""If Emma is a knight then Charlotte is a knight,"" is vacuously true because Emma is a knave. So, Grace could be either a knight or a knave.
+- Lucas says, ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true. Therefore, Lucas is a knight.
+
+Now, let's see:
+- If Ethan is a knight, then Grace is a knight.
+- If Ethan is a knave, then Grace is a knave.
+
+But let's see if this holds. If Ethan is a knight:
+- Emma is a knave.
+- Grace is a knight.
+- Charlotte is a knave.
+- Lucas is a knight.
+
+Grace's statement is true because Emma is a knave, making the conditional statement true regardless of Charlotte's status. So, this scenario could work.
+
+However, if Ethan is a knave:
+- Emma is a knave.
+- Grace is a knave.
+- Charlotte is a knave.
+- Lucas is a knight.
+
+Grace's statement would be ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the statement is vacuously true. But Grace is a knave, so she must be lying. But the statement is true, which contradicts Grace being a knave. Therefore, Ethan cannot be a knave in this scenario.
+
+So, in Scenario 2, if Ethan is a knight, it's consistent, but if Ethan is a knave, it leads to a contradiction. Therefore, Scenario 2 with Ethan as a knight is possible.
+
+But wait, in Scenario 1, where Emma is a knight, everything checks out without contradictions. In Scenario 2, even though Ethan being a knight seems possible, we have to ensure that all statements hold.
+
+However, there's a catch. In Scenario 2, if Ethan is a knight, then Grace is a knight. Grace's statement is true because Emma is a knave, making the conditional statement true. Lucas is a knight because Charlotte is a knave. So, all statements are consistent.
+
+But wait, in Scenario 1, Emma is a knight, which makes Charlotte a knight. Ethan is a knave, so his statement is false, meaning either Emma is a knight or Grace is a knave. Since Emma is a knight, the first part is true, but Ethan's statement is ""Emma is a knave and Grace is a knight."" For the entire statement to be false, it's enough that one part is false. So, if Emma is a knight, Ethan's statement is false, which is consistent with him being a knave.
+
+Grace's statement is true because Emma is a knight, and Charlotte is a knight. So, Grace is a knight.
+
+Lucas's statement is false because Charlotte is a knight, so Lucas is a knave.
+
+In Scenario 1, everything is consistent.
+
+In Scenario 2, if Ethan is a knight, then Grace is a knight, and Lucas is a knight. But Lucas says, ""Charlotte is not a knight,"" which would mean Charlotte is a knave. But in Scenario 2, Charlotte is a knave because Emma is a knave. So, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, so Grace is a knight. Lucas is a knight because Charlotte is a knave. Grace's statement is true because Emma is a knave, making the conditional statement true. So, all statements are consistent.
+
+But there's a problem here. If Ethan is a knight, then Grace is a knight. But Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the statement is vacuously true, which is fine. So, Grace is a knight.
+
+But in Scenario 1, Emma is a knight, making Charlotte a knight. Ethan is a knave, so his statement is false, meaning Emma is a knight or Grace is a knave. Since Emma is a knight, the statement is false, which is consistent with Ethan being a knave.
+
+Grace's statement is true because Emma is a knight, and Charlotte is a knight. Lucas's statement is false, making him a knave.
+
+So, both scenarios seem consistent. But there's a catch. In Scenario 2, Ethan says, ""Emma is a knave and Grace is a knight."" If Ethan is a knight, both parts must be true. So, Emma is a knave, and Grace is a knight. But in Scenario 1, Emma is a knight, which would make Ethan's statement false, making him a knave.
+
+Wait, but if Ethan is a knave, his statement is false, meaning it's not the case that both Emma is a knave and Grace is a knight. So, either Emma is a knight or Grace is a knave, or both.
+
+In Scenario 1, Emma is a knight, which makes Ethan's statement false, consistent with him being a knave.
+
+In Scenario 2, Emma is a knave, and Grace is a knight. Ethan's statement is true, making him a knight.
+
+But in Scenario 2, if Ethan is a knight, then Grace is a knight. Grace's statement is true because Emma is a knave, making the conditional statement true.
+
+However, Lucas's statement is ""Charlotte is not a knight."" In Scenario 2, Charlotte is a knave, so Lucas's statement is true, making him a knight.
+
+But in Scenario 1, Charlotte is a knight, so Lucas's statement is false, making him a knave.
+
+Wait, but in Scenario 2, if Ethan is a knight, then Grace is a knight, and Lucas is a knight. That would mean we have three knights: Emma, Ethan, Grace, and Lucas? Wait, no, in Scenario 2, Emma is a knave.
+
+Wait, let me clarify:
+
+In Scenario 1:
+- Emma: Knight
+- Ethan: Knave
+- Charlotte: Knight
+- Grace: Knight
+- Lucas: Knave
+
+In Scenario 2:
+- Emma: Knave
+- Ethan: Knight
+- Charlotte: Knave
+- Grace: Knight
+- Lucas: Knight
+
+Wait, but in Scenario 2, Lucas is a knight because Charlotte is a knave. So, Lucas's statement is true.
+
+But in Scenario 1, Lucas is a knave because Charlotte is a knight.
+
+Now, the problem is that both scenarios seem possible, but there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem consistent. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave, and Grace is a knight.
+
+Grace's statement is ""If Emma is a knight then Charlotte is a knight."" Since Emma is a knave, the conditional statement is vacuously true, so Grace is a knight.
+
+Lucas's statement is ""Charlotte is not a knight."" Since Charlotte is a knave, Lucas's statement is true, making him a knight.
+
+But wait, in Scenario 2, Emma is a knave, so Charlotte is a knave. Ethan is a knight, Grace is a knight, Lucas is a knight.
+
+But then, Emma is a knave, so her statement ""Charlotte is a knight"" is false, which is consistent.
+
+However, in Scenario 2, we have three knights: Ethan, Grace, and Lucas, and two knaves: Emma and Charlotte.
+
+But in Scenario 1, we have three knights: Emma, Charlotte, and Grace, and two knaves: Ethan and Lucas.
+
+Wait, but the problem is that both scenarios seem possible. However, there's a hidden contradiction in Scenario 2.
+
+In Scenario 2, Ethan is a knight, so his statement ""Emma is a knave and Grace is a knight"" is true. Therefore, Emma is a knave","Emma=knight, Ethan=knave, Charlotte=knight, Grace=knight, Lucas=knave",False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,2,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2391.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2391.json.jsonl,2,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_algebra_2427.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_algebra_2427.json.jsonl,,10,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,q,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,,29,False
+perturbed_run,math500_test_counting_and_probability_1003.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_counting_and_probability_1003.json.jsonl,1,29,False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"(8,\ -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point  P  are  (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,,"(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point  P  are  (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"(8,\ -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point  P  are  (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point P are  (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point  P  are  (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,,"(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point  P  are  (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,,"(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,"The coordinates of point P are (8, -2)","(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,,"(8,-2)",False
+perturbed_run,math500_test_geometry_538.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_geometry_538.json.jsonl,,"(8,-2)",False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,43,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,math500_test_number_theory_483.json,math,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/math500_test_number_theory_483.json.jsonl,,3,False
+perturbed_run,scibench_diff_307,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,45,1,0,Correct,False,data/judge_raw/dialogue/scibench_diff_307.jsonl,14,0.2244,False
+perturbed_run,scibench_fund_366,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,44,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_fund_366.jsonl,2.188,2.19,False
+perturbed_run,scibench_fund_366,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,42,1,0,Correct,False,data/judge_raw/dialogue/scibench_fund_366.jsonl,6,2.19,False
+perturbed_run,scibench_fund_366,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,45,1,0,Correct,False,data/judge_raw/dialogue/scibench_fund_366.jsonl,10,2.19,False
+perturbed_run,scibench_fund_366,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,45,1,0,Correct,False,data/judge_raw/dialogue/scibench_fund_366.jsonl,21.9,2.19,False
+perturbed_run,scibench_fund_366,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,46,1,0,Correct,False,data/judge_raw/dialogue/scibench_fund_366.jsonl,52.92,2.19,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,42,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9990,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9994,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,46,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9998,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,1,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,42,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,1,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9997,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,stop,,45,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9997,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,42,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9967,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.9977,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,44,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.996,0.9984,False
+perturbed_run,scibench_stat_538,science,deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,recovery,,46,0,1,Incorrect,False,data/judge_raw/dialogue/scibench_stat_538.jsonl,0.999,0.9984,False

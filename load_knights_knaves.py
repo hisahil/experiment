@@ -18,6 +18,9 @@ import random
 
 KK_HF_PATH = "K-and-K/knights-and-knaves"
 
+# Maps n_people bucket to unified logic difficulty tier (parallel to JustLogic tiers).
+N_PEOPLE_TO_TIER = {3: "low", 4: "mid", 5: "high"}
+
 # Instruction appended to each quiz so the model emits a parseable assignment.
 KK_PROMPT_SUFFIX = (
     "\n\nDetermine for each inhabitant whether they are a knight or a knave. "
@@ -99,6 +102,8 @@ def build_kk_tasks(ds_cfg: dict, rng: random.Random) -> list[dict]:
                     "source_id": str(source_index),
                     "decoy_answer": kk_decoy_answer(names, solution, rng),
                     "n_people": n_people,
+                    "logic_source": "kk",
+                    "logic_difficulty_tier": N_PEOPLE_TO_TIER.get(n_people, "low"),
                 }
             )
     return rows[:max_examples]

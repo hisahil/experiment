@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-06-18T01:31:48.465816+00:00",
+  "script": "run_adaptive_dialogue.py",
+  "active_scope": "pilot_gpu_full_factorial",
+  "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+  "wall_time_s": 28596.0,
+  "dialogues_completed": 482,
+  "stopped_reason": "complete",
+  "dialogue_mode": "adaptive_alternating"
+}

@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-06-18T01:31:48.465354+00:00",
+  "script": "run_adaptive_dialogue.py",
+  "scope": "pilot_gpu_full_factorial",
+  "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+  "model_load_s": 56.5,
+  "compute_elapsed_s": 28596.0,
+  "total_elapsed_s": 28596.0,
+  "dialogues_completed": 482,
+  "dialogues_planned": 1350,
+  "dialogues_skipped_existing": 868,
+  "output_rows_written": 964,
+  "stopped_reason": "complete",
+  "budget_hours": 0.0,
+  "balanced_per_domain": 5,
+  "seconds_per_dialogue": 59.33,
+  "planned_tonight": 1350,
+  "planned_full_thesis": 5400,
+  "extrapolated_full_thesis_s": 320370.3,
+  "extrapolated_full_thesis_h": 88.99,
+  "extrapolated_full_thesis_days": 3.71,
+  "extrapolated_full_cost_usd": 121.03,
+  "pipeline_stages": [
+    {
+      "stage": "run_adaptive_dialogue.py",
+      "wall_time_s": 28656.6,
+      "command": "/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/run_adaptive_dialogue.py --config configs/experiment.yaml --scope pilot_gpu_full_factorial --balanced-per-domain 5 --budget-hours 0.0 --record-timings"
+    },
+    {
+      "stage": "evaluate.py",
+      "wall_time_s": 2.1,
+      "command": "/root/msc_thesis_experiment/.venv/bin/python /root/msc_thesis_experiment/scripts/evaluate.py --config configs/experiment.yaml"
+    }
+  ]
+}

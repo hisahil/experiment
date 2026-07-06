@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from dataclasses import dataclass
@@ -16,6 +17,112 @@ class GenerationResult:
     wall_time_s: float
     # Set by generate_chat when the backend can distinguish EOS vs length cap.
     finish_reason: str | None = None  # "stop" | "length" | None
+    # --- Phase-1 instrumentation (continuation runs). All optional; only the
+    # vLLM / continuation path fills them. Dry-run / Transformers leave them None
+    # (or use a word-count fallback for the trace token count) so legacy callers
+    # are unaffected. ---
+    # Prompt audit: exact string sent to the backend (after chat-template render).
+    prompt_sha256: str | None = None
+    rendered_prompt: str | None = None  # only carried for audit-sample persistence
+    # Token count of the continuation reasoning trace (accumulated_trace) at the
+    # moment of THIS call — i.e. the shared fork-point C for stop/recovery, or the
+    # growing context for intermediate turns. Excludes chat template / task / system.
+    reasoning_trace_tokens: int | None = None
+    # Confidence: mean log-probability over generated tokens (perplexity proxy).
+    mean_logprob: float | None = None
+    # Top log-probs of the FIRST generated token (for stop: distribution over the
+    # boxed answer; derived_metrics compares decoy vs gold for false_consensus).
+    answer_top_logprobs: list[dict] | None = None
+    # Batch timing (attached per-result by generate_from_trace_batch). Per-sample
+    # values are explicitly approximate: vLLM batches in parallel, so elapsed/n is
+    # NOT a true per-sample latency. Use batch_wall_time_s + tokens_per_second_batch
+    # for cost/ETA; surface per-sample numbers only as approx_*.
+    batch_wall_time_s: float | None = None
+    batch_size: int | None = None
+    approx_wall_time_s: float | None = None
+    tokens_per_second_batch: float | None = None
+    tokens_per_second_sample_approx: float | None = None
+
+
+def _sha256(text: str) -> str:
+    """Stable hash of the exact rendered prompt (continuation-mode audit)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def count_tokens(tokenizer: Any, text: str) -> int:
+    """Token count via the model tokenizer; word-count fallback when unavailable.
+
+    Used for reasoning_trace_tokens and offline baseline tokenisation. The
+    fallback (whitespace split) is only hit on the dry-run backend; the real
+    vLLM/Transformers backends always carry a tokenizer.
+    """
+    if not text:
+        return 0
+    if tokenizer is not None and hasattr(tokenizer, "encode"):
+        try:
+            return len(tokenizer.encode(text))
+        except Exception:
+            pass
+    return len(text.split())
+
+
+def _extract_vllm_logprobs(
+    completion: Any,
+) -> tuple[float | None, list[dict] | None]:
+    """Derive (mean_logprob, answer_top_logprobs) from a vLLM CompletionOutput.
+
+    mean_logprob: arithmetic mean of the SAMPLED token log-probs (a perplexity
+    proxy; lower = less confident). answer_top_logprobs: the top-k candidate
+    log-probs at the FIRST generated position — for stop runs this is the
+    distribution over the boxed answer token, so derived_metrics can compare the
+    decoy vs gold mass for false_consensus.
+
+    Defensive across vLLM versions: returns (None, None) when logprobs were not
+    requested or the structure is unexpected.
+    """
+    token_logprobs = getattr(completion, "logprobs", None)
+    if not token_logprobs:
+        return None, None
+    token_ids = list(getattr(completion, "token_ids", None) or [])
+
+    def _lp_value(entry: Any) -> float | None:
+        # vLLM stores a Logprob dataclass (.logprob) keyed by token id.
+        lp = getattr(entry, "logprob", None)
+        return float(lp) if lp is not None else None
+
+    # Mean over the sampled token at each step.
+    sampled: list[float] = []
+    for i, step in enumerate(token_logprobs):
+        if not isinstance(step, dict) or not step:
+            continue
+        chosen = None
+        if i < len(token_ids) and token_ids[i] in step:
+            chosen = _lp_value(step[token_ids[i]])
+        if chosen is None:
+            # Fall back to the highest-prob entry when the sampled id is absent.
+            vals = [v for v in (_lp_value(e) for e in step.values()) if v is not None]
+            chosen = max(vals) if vals else None
+        if chosen is not None:
+            sampled.append(chosen)
+    mean_lp = (sum(sampled) / len(sampled)) if sampled else None
+
+    # Top candidates at the first generated position.
+    top: list[dict] | None = None
+    first = token_logprobs[0] if token_logprobs else None
+    if isinstance(first, dict) and first:
+        items: list[dict] = []
+        for tid, entry in first.items():
+            lp = _lp_value(entry)
+            if lp is None:
+                continue
+            items.append({
+                "token_id": int(tid),
+                "token": getattr(entry, "decoded_token", None),
+                "logprob": lp,
+            })
+        items.sort(key=lambda d: d["logprob"], reverse=True)
+        top = items or None
+    return mean_lp, top
 
 
 Message = dict[str, str]
@@ -255,8 +362,187 @@ def _infer_prompt_render_method(tokenizer: Any) -> str:
     return "manual"
 
 
+# ── Continuation mode (Recum-style open think block) ──────────────────────────
+#
+# Unlike the restart path (build_dialogue_messages + generate_chat with closed
+# assistant turns), continuation mode keeps the model's think block OPEN and
+# appends the (possibly corrupted) reasoning trace raw, so the model continues
+# its OWN chain of thought instead of restarting. This mirrors von Recum's
+# mechanism.
+#
+# Cross-model portage (Phase 0): the open/close tag literals are no longer
+# module constants but come from `src/model_family.py` (ThinkTags), so
+# GLM-Z1 / Gemma / Ministral / Phi-4 can drop in without touching this file.
+# The DeepSeek defaults below are re-exported for legacy tests that import
+# THINK_CLOSE_TAG / THINK_OPEN_TAG directly; runtime code should resolve tags
+# via `model_family.get_think_tags(model_name?)` instead.
+
+THINK_CLOSE_TAG = "</think>"
+THINK_OPEN_TAG = "<think>"
+
+# Recovery has no \boxed{ prefill (unlike stop), so the model often ends with prose
+# ("**Answer:** the sum is 10") that the deterministic parser must guess at. This
+# system instruction standardises the math recovery output on \boxed{} to reduce
+# parser false-negatives. Used only for the recovery turn of math dialogues; stop
+# (prefill) and intermediate (open think block) are untouched.
+MATH_RECOVERY_FORMAT_INSTRUCTION = (
+    "When you finish reasoning, give exactly one final answer "
+    "on its own line in the form \\boxed{...}."
+)
+
+
+def _resolve_think_tags(think_tags: Any) -> Any:
+    """Lazy resolver: use passed-in tags, else the active model family."""
+    if think_tags is not None:
+        return think_tags
+    # Import inside the function to avoid a circular import at module load
+    # (model_family only depends on stdlib + PyYAML).
+    from model_family import get_think_tags  # noqa: WPS433
+
+    return get_think_tags()
+
+
+def _manual_open_think_prompt(messages: list[Message], *, think_tags: Any = None) -> str:
+    """Fallback prompt (no chat template) that ends inside an open think block."""
+    tags = _resolve_think_tags(think_tags)
+    prompt = _manual_chat_prompt(messages)
+    return f"{prompt}\n{tags.open}"
+
+
+def build_continuation_prompt(
+    tokenizer: Any,
+    problem: str,
+    reasoning_trace: str,
+    *,
+    system: str | None = None,
+    stop_prefill: str | None = None,
+    think_tags: Any = None,
+    tokenizer_extra_kwargs: dict | None = None,
+) -> str:
+    """Render a raw-completion prompt that ends inside an OPEN assistant think block.
+
+    Steps (Recum-style, per family):
+      1. messages = [system?, user(problem)]  — no assistant turn
+         - If the family requires a Thinking-Mode trigger (Gemma's `<|think|>`),
+           we prepend it to the system prompt so `apply_chat_template` opens the
+           thought channel instead of a bare assistant turn.
+      2. apply_chat_template(add_generation_prompt=True) — opens the think block
+      3. append reasoning_trace raw — the block stays open, model continues it
+      4. (optional) append stop_prefill — e.g. "</think>\\n\\nTherefore, the final
+         answer is \\boxed{" closes the block and forces a short committed answer.
+
+    Cross-model:
+      - `think_tags` defaults to the active model family (set via
+        model_family.set_active_model_family). Fall back to DeepSeek `<think>`.
+      - `tokenizer_extra_kwargs` is forwarded to `apply_chat_template` so
+        Gemma can pass `enable_thinking=True`.
+
+    The caller runs backend.generate(prompt) as raw completion (no chat history).
+    """
+    tags = _resolve_think_tags(think_tags)
+
+    # tokenizer_extra_kwargs default: read from the active model family so
+    # Gemma's `enable_thinking=True` is applied automatically once
+    # `set_active_model_family("google/gemma-4-12B-it")` has been called
+    # (typically inside `create_backend`).
+    if tokenizer_extra_kwargs is None:
+        try:
+            from model_family import get_active_model_family  # noqa: WPS433
+
+            extra_kwargs = dict(get_active_model_family().tokenizer_extra_kwargs)
+        except Exception:
+            extra_kwargs = {}
+    else:
+        extra_kwargs = dict(tokenizer_extra_kwargs)
+
+    # Gemma-style trigger: inject into (or prepend to) the system message so the
+    # chat template actually opens the thought channel. When no system prompt is
+    # given, create a minimal one containing only the trigger.
+    resolved_system: str | None = system
+    if tags.trigger:
+        if resolved_system:
+            resolved_system = f"{tags.trigger}\n{resolved_system}"
+        else:
+            resolved_system = tags.trigger
+
+    messages: list[Message] = []
+    if resolved_system:
+        messages.append({"role": "system", "content": resolved_system})
+    messages.append({"role": "user", "content": problem})
+
+    formatted: str | None = None
+    if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
+        try:
+            formatted = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                **extra_kwargs,
+            )
+        except (TypeError, ValueError, NotImplementedError):
+            # Some templates reject unknown kwargs (e.g. enable_thinking on
+            # DeepSeek). Retry once without the extras before falling back.
+            if extra_kwargs:
+                try:
+                    formatted = tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                except (TypeError, ValueError, NotImplementedError):
+                    formatted = None
+            else:
+                formatted = None
+    if formatted is None:
+        formatted = _manual_open_think_prompt(messages, think_tags=tags)
+
+    if reasoning_trace:
+        formatted += reasoning_trace
+    if stop_prefill:
+        formatted += stop_prefill
+    return formatted
+
+
+def _truncate_at_stop(text: str, stop: list[str] | None) -> tuple[str, bool]:
+    """Cut text at the earliest stop-sequence occurrence (post-hoc fallback).
+
+    Returns (truncated_text, hit) where hit is True when a stop sequence was found.
+    Used by backends without native stop-sequence support (Transformers/dry-run).
+    """
+    if not stop:
+        return text, False
+    cut = len(text)
+    hit = False
+    for s in stop:
+        if not s:
+            continue
+        idx = text.find(s)
+        if idx != -1 and idx < cut:
+            cut = idx
+            hit = True
+    return (text[:cut], True) if hit else (text, False)
+
+
+def strip_think_closure(text: str, *, think_tags: Any = None) -> str:
+    """Keep only the text BEFORE the family close-tag for an intermediate turn.
+
+    When the model ends an intermediate continuation with a close tag (and
+    possibly a post-think answer), appending that verbatim would close the
+    block and make the next generation restart. We drop the closing tag and
+    everything after it so the accumulated trace stays an open think block.
+    Stray opening tags are removed too.
+
+    `think_tags` defaults to the active model family (falls back to DeepSeek
+    `</think>` / `<think>`), so legacy call sites keep working without changes.
+    """
+    tags = _resolve_think_tags(think_tags)
+    idx = text.find(tags.close)
+    if idx != -1:
+        text = text[:idx]
+    return text.replace(tags.open, "")
+
+
 class BaseBackend:
     prompt_render_method: str = "manual"
+    tokenizer: Any = None
 
     def generate(
         self,
@@ -265,6 +551,9 @@ class BaseBackend:
         temperature: float,
         top_p: float,
         seed: int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> GenerationResult:
         raise NotImplementedError
 
@@ -275,13 +564,109 @@ class BaseBackend:
         temperature: float,
         top_p: float,
         seeds: list[int] | int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> list[GenerationResult]:
         """Submit multiple prompts; base implementation is sequential."""
         seed_list = _expand_seeds(seeds, len(prompts))
         return [
-            self.generate(p, max_new_tokens, temperature, top_p, seed=s)
+            self.generate(
+                p, max_new_tokens, temperature, top_p, seed=s, stop=stop,
+                logprobs=logprobs, top_k=top_k,
+            )
             for p, s in zip(prompts, seed_list)
         ]
+
+    def generate_from_trace_batch(
+        self,
+        items: list[tuple[str, str, str | None]],
+        *,
+        max_new_tokens: int,
+        temperature: float,
+        top_p: float,
+        seeds: list[int] | int | None = None,
+        stop: list[str] | None = None,
+        system: str | None = None,
+        logprobs: int | None = None,
+        think_tags: Any = None,
+        tokenizer_extra_kwargs: dict | None = None,
+    ) -> list[GenerationResult]:
+        """Continuation-mode batch generation.
+
+        items: list of (problem, reasoning_trace, stop_prefill). Each is rendered
+        with build_continuation_prompt (open think block + raw trace) and run as a
+        raw completion. When stop_prefill is set it is prepended to the result text
+        (like generate_chat) so downstream answer extraction sees the full
+        "...\\boxed{X}" string.
+
+        Cross-model:
+          - `think_tags` / `tokenizer_extra_kwargs` are forwarded to
+            build_continuation_prompt so Gemma / Ministral / GLM prompts use
+            the correct open marker and template kwargs.
+
+        Phase-1 instrumentation attached per result (continuation only):
+          - prompt_sha256 / rendered_prompt: exact string sent to the backend.
+          - reasoning_trace_tokens: tokeniser count of the continuation trace
+            (the accumulated_trace / fork-point C), excluding template/task/system.
+          - batch_* timing: wall time measured around the whole batch call; the
+            per-sample value is approximate (vLLM batches in parallel).
+          - mean_logprob / answer_top_logprobs: filled when the backend supports
+            logprobs (vLLM) and logprobs is requested.
+        """
+        # Resolve tags once so every prompt in the batch uses the same family.
+        resolved_tags = _resolve_think_tags(think_tags)
+        prompts = [
+            build_continuation_prompt(
+                self.tokenizer,
+                problem,
+                trace,
+                system=system,
+                stop_prefill=pref,
+                think_tags=resolved_tags,
+                tokenizer_extra_kwargs=tokenizer_extra_kwargs,
+            )
+            for problem, trace, pref in items
+        ]
+        trace_token_counts = [count_tokens(self.tokenizer, trace) for _, trace, _ in items]
+        prompt_hashes = [_sha256(p) for p in prompts]
+
+        t0 = time.time()
+        raw_results = self.generate_batch(
+            prompts, max_new_tokens, temperature, top_p, seeds=seeds, stop=stop,
+            logprobs=logprobs,
+        )
+        batch_wall = time.time() - t0
+        bsize = len(prompts)
+        total_completion = sum(int(r.completion_tokens or 0) for r in raw_results)
+        tps_batch = (total_completion / batch_wall) if batch_wall > 0 else None
+        approx_wall = (batch_wall / bsize) if bsize else None
+        tps_sample = (tps_batch / bsize) if (tps_batch is not None and bsize) else None
+
+        results: list[GenerationResult] = []
+        for (_, _, pref), prompt, phash, t_tokens, res in zip(
+            items, prompts, prompt_hashes, trace_token_counts, raw_results
+        ):
+            text = pref + res.text if pref else res.text
+            out = GenerationResult(
+                text=text,
+                prompt_tokens=res.prompt_tokens,
+                completion_tokens=res.completion_tokens,
+                wall_time_s=res.wall_time_s,
+                finish_reason=res.finish_reason,
+                prompt_sha256=phash,
+                rendered_prompt=prompt,
+                reasoning_trace_tokens=t_tokens,
+                mean_logprob=res.mean_logprob,
+                answer_top_logprobs=res.answer_top_logprobs,
+                batch_wall_time_s=batch_wall,
+                batch_size=bsize,
+                approx_wall_time_s=approx_wall,
+                tokens_per_second_batch=tps_batch,
+                tokens_per_second_sample_approx=tps_sample,
+            )
+            results.append(out)
+        return results
 
     def generate_chat(
         self,
@@ -369,6 +754,9 @@ class DryRunBackend(BaseBackend):
         temperature: float,
         top_p: float,
         seed: int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> GenerationResult:
         start = time.time()
         if "\\boxed{" in prompt:
@@ -449,6 +837,9 @@ class TransformersBackend(BaseBackend):
         temperature: float,
         top_p: float,
         seeds: list[int] | int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> list[GenerationResult]:
         """Sequential fallback — TransformersBackend does not support true batching."""
         import warnings
@@ -459,7 +850,7 @@ class TransformersBackend(BaseBackend):
         )
         seed_list = _expand_seeds(seeds, len(prompts))
         return [
-            self.generate(p, max_new_tokens, temperature, top_p, seed=s)
+            self.generate(p, max_new_tokens, temperature, top_p, seed=s, stop=stop, top_k=top_k)
             for p, s in zip(prompts, seed_list)
         ]
 
@@ -470,6 +861,9 @@ class TransformersBackend(BaseBackend):
         temperature: float,
         top_p: float,
         seed: int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> GenerationResult:
         import torch
 
@@ -489,6 +883,8 @@ class TransformersBackend(BaseBackend):
         if temperature > 0:
             gen_kwargs["temperature"] = temperature
             gen_kwargs["top_p"] = top_p
+            if top_k is not None and top_k > 0:
+                gen_kwargs["top_k"] = int(top_k)
         with torch.no_grad():
             outputs = self.model.generate(**inputs, **gen_kwargs)
         generated = outputs[0][prompt_tokens:]
@@ -496,6 +892,11 @@ class TransformersBackend(BaseBackend):
         elapsed = time.time() - start
         completion_tokens = int(generated.shape[-1])
         finish_reason = "length" if completion_tokens >= max_new_tokens else "stop"
+        # No native stop-sequence support: truncate post-hoc so continuation-mode
+        # intermediate turns can be cut at the first paragraph break ("\n\n").
+        text, hit = _truncate_at_stop(text, stop)
+        if hit:
+            finish_reason = "stop"
         return GenerationResult(
             text=text,
             prompt_tokens=prompt_tokens,
@@ -548,23 +949,42 @@ class VLLMBackend(BaseBackend):
         temperature: float,
         top_p: float,
         seeds: list[int] | int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> list[GenerationResult]:
         """Submit all prompts in one vLLM call for maximum GPU utilisation.
 
         seeds: per-prompt seeds become a parallel list of SamplingParams (vLLM
         accepts List[SamplingParams] aligned to the prompt list), so each prompt
         is seeded independently without splitting the batch.
+        stop: optional stop sequences (e.g. ["\\n\\n"]) to cut continuation-mode
+        intermediate turns after one paragraph; vLLM strips them from the output.
+        logprobs: when set, request that many top log-probs per generated token so
+        mean_logprob (perplexity proxy) and answer_top_logprobs (first-token
+        distribution, e.g. boxed answer) can be derived.
+        top_k: Card-Wert für Baseline-Sampling (Gemma=64, GLM=40). Nicht gesetzt
+        im Continuation-Modus (Recum: uniform top_k=N/A).
         """
         from vllm import SamplingParams
 
+        top_k_val = int(top_k) if (top_k is not None and top_k > 0) else -1
         seed_list = _expand_seeds(seeds, len(prompts))
         if any(s is not None for s in seed_list):
             params: list[SamplingParams] | SamplingParams = [
-                SamplingParams(max_tokens=max_new_tokens, temperature=temperature, top_p=top_p, seed=s)
+                SamplingParams(
+                    max_tokens=max_new_tokens, temperature=temperature, top_p=top_p,
+                    top_k=top_k_val,
+                    seed=s, stop=stop, logprobs=logprobs,
+                )
                 for s in seed_list
             ]
         else:
-            params = SamplingParams(max_tokens=max_new_tokens, temperature=temperature, top_p=top_p)
+            params = SamplingParams(
+                max_tokens=max_new_tokens, temperature=temperature, top_p=top_p,
+                top_k=top_k_val,
+                stop=stop, logprobs=logprobs,
+            )
         outputs = self.llm.generate(prompts, params)
         results: list[GenerationResult] = []
         for output in outputs:
@@ -573,12 +993,15 @@ class VLLMBackend(BaseBackend):
             finish = getattr(r, "finish_reason", None) or (
                 "length" if completion_tokens >= max_new_tokens else "stop"
             )
+            mean_lp, top_lp = _extract_vllm_logprobs(r)
             results.append(GenerationResult(
                 text=r.text,
                 prompt_tokens=len(output.prompt_token_ids or []),
                 completion_tokens=completion_tokens,
                 wall_time_s=0.0,  # measured at batch level by the caller
                 finish_reason=str(finish) if finish else None,
+                mean_logprob=mean_lp,
+                answer_top_logprobs=top_lp,
             ))
         return results
 
@@ -589,15 +1012,22 @@ class VLLMBackend(BaseBackend):
         temperature: float,
         top_p: float,
         seed: int | None = None,
+        stop: list[str] | None = None,
+        logprobs: int | None = None,
+        top_k: int | None = None,
     ) -> GenerationResult:
         from vllm import SamplingParams
 
+        top_k_val = int(top_k) if (top_k is not None and top_k > 0) else -1
         start = time.time()
         params = SamplingParams(
             max_tokens=max_new_tokens,
             temperature=temperature,
             seed=seed,
             top_p=top_p,
+            top_k=top_k_val,
+            stop=stop,
+            logprobs=logprobs,
         )
         outputs = self.llm.generate([prompt], params)
         output = outputs[0]  # RequestOutput — carries prompt_token_ids
@@ -608,26 +1038,59 @@ class VLLMBackend(BaseBackend):
         finish = getattr(result, "finish_reason", None) or (
             "length" if completion_tokens >= max_new_tokens else "stop"
         )
+        mean_lp, top_lp = _extract_vllm_logprobs(result)
         return GenerationResult(
             text=result.text,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             wall_time_s=elapsed,
             finish_reason=str(finish) if finish else None,
+            mean_logprob=mean_lp,
+            answer_top_logprobs=top_lp,
         )
 
 
 def create_backend(model_cfg: dict, dry_run: bool = False) -> BaseBackend:
+    """Instantiate a backend and set the active model family.
+
+    When a real model is loaded (vLLM / Transformers), we also register the
+    resolved family process-wide so continuation-mode helpers (evaluator,
+    adaptive_dialogue) pick up the right think-tags without needing to plumb
+    the model name through every call. Baseline overrides from
+    `model_family.yaml` (`max_model_len`, `gpu_memory_utilization`) fill in
+    when experiment.yaml does not set them explicitly.
+    """
     if dry_run:
         return DryRunBackend()
+
     backend = model_cfg.get("backend", "vllm").lower()
+    model_name = model_cfg["name"]
+
+    # Register the active family so downstream helpers (evaluator, dialogue)
+    # can resolve tags without explicit plumbing.
+    try:
+        from model_family import resolve_model_family, set_active_model_family  # noqa: WPS433
+
+        family = set_active_model_family(model_name)
+    except Exception:
+        family = None  # keep going; ThinkTags defaults still work
+
+    max_model_len = model_cfg.get("max_model_len")
+    if max_model_len is None and family is not None:
+        max_model_len = family.vllm.max_model_len
+    gpu_util = model_cfg.get("gpu_memory_utilization")
+    if gpu_util is None and family is not None:
+        gpu_util = family.vllm.gpu_memory_utilization
+    if gpu_util is None:
+        gpu_util = 0.90
+
     if backend == "transformers":
-        return TransformersBackend(model_cfg["name"], dtype=model_cfg.get("dtype", "auto"))
+        return TransformersBackend(model_name, dtype=model_cfg.get("dtype", "auto"))
     if backend == "vllm":
         return VLLMBackend(
-            model_cfg["name"],
+            model_name,
             dtype=model_cfg.get("dtype", "auto"),
-            max_model_len=model_cfg.get("max_model_len"),
-            gpu_memory_utilization=float(model_cfg.get("gpu_memory_utilization", 0.90)),
+            max_model_len=max_model_len,
+            gpu_memory_utilization=float(gpu_util),
         )
     raise ValueError(f"Unknown backend: {backend}")

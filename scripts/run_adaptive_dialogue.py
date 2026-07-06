@@ -36,9 +36,16 @@ from adaptive_dialogue import (  # noqa: E402
     append_jsonl_flush,
     append_transcript_jsonl,
     build_complete_dialogue_record,
+    compute_continuation_prefix,
     init_dialogue_state,
     resolve_intermediate_max_tokens,
+    run_continuation_dialogues,
     run_dialogue_until_complete,
+)
+from experiment_design import (  # noqa: E402
+    GENERATION_MODE_CONTINUATION,
+    GENERATION_MODE_RESTART,
+    GENERATION_MODES,
 )
 from baseline_index import index_verified_baselines  # noqa: E402
 from experiment_scope import (  # noqa: E402
@@ -51,7 +58,13 @@ from experiment_scope import (  # noqa: E402
     select_tasks,
     select_tasks_balanced,
 )
-from llm_backend import create_backend  # noqa: E402
+from llm_backend import MATH_RECOVERY_FORMAT_INSTRUCTION, create_backend  # noqa: E402
+from model_family import (  # noqa: E402
+    continuation_sampling_kwargs,
+    make_stop_prefill_selector,
+    resolve_model_family,
+    set_active_model_family,
+)
 from run_timings import build_extrapolation, fmt_duration, write_run_timings  # noqa: E402
 from run_perturbed import (  # noqa: E402
     compute_midpoint,
@@ -62,7 +75,6 @@ from run_perturbed import (  # noqa: E402
     load_tasks,
     load_yaml,
     resolve_injection_steps,
-    select_stop_prefill,
 )
 
 DEFAULT_CONFIG = ROOT / "configs/experiment.yaml"
@@ -150,7 +162,7 @@ def make_claude_fn(provider: str, model: str, temperature: float):
     from generate_injections import call_llm, parse_single_step  # noqa: E402
 
     def claude_fn(system: str, user: str, max_tokens: int) -> str:
-        raw = call_llm(
+        raw, _stop_reason = call_llm(
             user,
             provider,
             model,
@@ -175,11 +187,14 @@ def build_output_record(
     stop_max_tokens: int,
     math_tolerance: float = 1e-4,
     science_tolerance: float = 1e-2,
+    gen: object | None = None,
 ) -> dict:
     task = state.task
     domain = task.get("domain", "math")
     eval_type = task.get("eval_type")
-    extracted = extract_domain_answer(raw_output, domain, eval_type)
+    extracted = extract_domain_answer(
+        raw_output, domain, eval_type, prefer_first_boxed=(variant == "stop")
+    )
     gold = str(task.get("gold_answer", ""))
     # L0: deterministic grading only — LLM judge runs post-hoc (scripts/judge_runs.py).
     det_correct = deterministic_grade(
@@ -219,6 +234,7 @@ def build_output_record(
         "condition": state.condition,
         "turn2_source": state.turn2_source,
         "dialogue_mode": "adaptive_alternating",
+        "generation_mode": state.generation_mode,
         # Per-row token caps so Script 4 classifies truncation per row (old rows
         # default to 100/8192). Lets the 100-cap and 500-cap runs be reported
         # stratified instead of mixed.
@@ -232,7 +248,81 @@ def build_output_record(
             max_new_tokens=recovery_max_tokens,
             completion_tokens=tokens_generated,
         )
+
+    # Phase-1 metadata (Script 4 / derived_metrics inputs). decoy_match is NOT
+    # computed here — derived_metrics owns the single is_correct() decoy path so
+    # the matching rule lives in one place (Phase 2). We only persist the decoy
+    # target + baseline step count.
+    if state.decoy_answer is not None:
+        record["decoy_answer"] = state.decoy_answer
+    if state.baseline_step_count is not None:
+        record["baseline_step_count"] = state.baseline_step_count
+    # Injection sub-labels (Punkt 3, Feld-Propagation). Only meaningful for the
+    # matching error_type; None otherwise. Downstream evaluation stratifies by
+    # these to reveal e.g. paraphrased_shift subtype effects on susceptibility.
+    if state.shift_subtype is not None:
+        record["shift_subtype"] = state.shift_subtype
+    if state.off_topic_theme is not None:
+        record["off_topic_theme"] = state.off_topic_theme
+
+    # Phase-1 instrumentation off the GenerationResult (continuation only). Missing
+    # on dry-run/restart → fields simply stay absent.
+    if gen is not None:
+        for attr in (
+            "prompt_sha256",
+            "reasoning_trace_tokens",
+            "mean_logprob",
+            "batch_wall_time_s",
+            "batch_size",
+            "approx_wall_time_s",
+            "tokens_per_second_batch",
+            "tokens_per_second_sample_approx",
+        ):
+            val = getattr(gen, attr, None)
+            if val is not None:
+                record[attr] = val
+        # Boxed-answer distribution only on stop (decoy-vs-gold in Phase 2).
+        if variant == "stop":
+            top_lp = getattr(gen, "answer_top_logprobs", None)
+            if top_lp is not None:
+                record["answer_top_logprobs"] = top_lp
     return record
+
+
+def _write_prompt_audit(audit_dir: Path, state, stop_res, rec_res) -> None:
+    """Persist the full rendered prompt for one dialogue (continuation proof).
+
+    Writes data/prompt_audit/{dialogue_id}/{stop,recovery}.txt with the exact
+    string sent to the backend, plus meta.json (hashes, token counts). Lets a
+    reviewer confirm the think block is OPEN and the trace + injections are present
+    (no restart). All rows still carry prompt_sha256 for reproducibility.
+    """
+    try:
+        d = Path(audit_dir) / str(state.dialogue_id)
+        d.mkdir(parents=True, exist_ok=True)
+        meta: dict = {
+            "dialogue_id": state.dialogue_id,
+            "task_id": state.task.get("task_id"),
+            "model": state.model_name,
+            "error_type": state.error_type,
+            "k": state.k,
+            "length_level": state.length_level,
+            "seed": state.seed,
+        }
+        for variant, res in (("stop", stop_res), ("recovery", rec_res)):
+            rendered = getattr(res, "rendered_prompt", None)
+            if rendered is not None:
+                (d / f"{variant}.txt").write_text(rendered, encoding="utf-8")
+            meta[f"{variant}_prompt_sha256"] = getattr(res, "prompt_sha256", None)
+            meta[f"{variant}_reasoning_trace_tokens"] = getattr(
+                res, "reasoning_trace_tokens", None
+            )
+            meta[f"{variant}_prompt_tokens"] = getattr(res, "prompt_tokens", None)
+        (d / "meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"[WARN] prompt audit write failed for {state.dialogue_id}: {exc}", file=sys.stderr)
 
 
 def load_existing_keys(out_path: Path) -> set[str]:
@@ -338,6 +428,9 @@ def write_run_metadata_summary(
     wall_time_s: float,
     dialogues_completed: int,
     stopped_reason: str,
+    backend: object | None = None,
+    continuation_sampling: dict | None = None,
+    is_continuation: bool | None = None,
 ) -> None:
     meta_path = output_dir / "run_metadata.json"
     payload: dict = {}
@@ -346,6 +439,24 @@ def write_run_metadata_summary(
             payload = json.loads(meta_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             payload = {}
+
+    # Cross-model provenance: git-Commit + HF-Revision + family + sampling.
+    # Keeps metadata compatible with old callers (nothing removed).
+    try:
+        from run_provenance import build_provenance_block  # noqa: WPS433
+
+        provenance = build_provenance_block(
+            model_name=model_name,
+            backend=backend,
+            continuation_sampling=continuation_sampling,
+        )
+    except Exception:
+        provenance = {}
+
+    dialog_mode = (
+        "continuation" if is_continuation
+        else ("adaptive_alternating" if is_continuation is False else "adaptive_alternating")
+    )
     payload.update({
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "script": "run_adaptive_dialogue.py",
@@ -354,8 +465,9 @@ def write_run_metadata_summary(
         "wall_time_s": round(wall_time_s, 1),
         "dialogues_completed": dialogues_completed,
         "stopped_reason": stopped_reason,
-        "dialogue_mode": "adaptive_alternating",
+        "dialogue_mode": dialog_mode,
     })
+    payload.update({k: v for k, v in provenance.items() if v is not None})
     output_dir.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -390,6 +502,26 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument(
+        "--prompt-audit-sample",
+        type=int,
+        default=None,
+        help=(
+            "Override script3.prompt_audit_sample: persist the FULL rendered prompt "
+            "for the first N dialogues (continuation-mode proof). All rows still carry "
+            "prompt_sha256. Use a large N on mini_run to audit every dialogue."
+        ),
+    )
+    parser.add_argument(
+        "--generation-mode",
+        choices=GENERATION_MODES,
+        default=None,
+        help=(
+            "Override script3.dialogue_generation_mode. continuation = Recum-style "
+            "open think block, deletion model, all k injections pre-generated (no live "
+            "Claude). restart = legacy multi-turn dialogue."
+        ),
+    )
+    parser.add_argument(
         "--task-shard",
         type=str,
         default=None,
@@ -410,6 +542,54 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--model-name",
+        type=str,
+        default=None,
+        help=(
+            "Override model.name from configs/experiment.yaml. Required when "
+            "swapping cross-model families (glm-z1-9b / gemma-4-12b / "
+            "ministral-3-14b) without a per-model overlay config."
+        ),
+    )
+    parser.add_argument(
+        "--baseline-file",
+        type=Path,
+        default=None,
+        help=(
+            "Override script3.continuation.baseline_file — path to the "
+            "per-model continuation baselines JSONL "
+            "(data/baselines/<slug>/baseline_cots_continuation.jsonl)."
+        ),
+    )
+    parser.add_argument(
+        "--injections-file",
+        type=Path,
+        default=None,
+        help=(
+            "Override script3.injections_file / paths.injections — path to the "
+            "per-model injections JSONL (data/injections_generated_<slug>.jsonl)."
+        ),
+    )
+    parser.add_argument(
+        "--tasks",
+        type=Path,
+        default=None,
+        help=(
+            "Override paths.tasks — path to the task pool JSONL "
+            "(e.g. data/smoke_tasks.jsonl for a smoke run vs "
+            "data/experiment_tasks.jsonl for the full 100-task battery)."
+        ),
+    )
+    parser.add_argument(
+        "--complete-dialogues-file",
+        type=Path,
+        default=None,
+        help=(
+            "Override script3.complete_dialogues_file — full-dialogue transcript "
+            "path (data/<slug>/complete_dialogues.jsonl)."
+        ),
+    )
+    parser.add_argument(
         "--no-judge",
         action="store_true",
         help=(
@@ -424,8 +604,43 @@ def main() -> None:
     script3 = cfg.get("script3", {})
     paths = cfg.get("paths", {})
     model_cfg = dict(cfg["model"])
+    # CLI-Override wins (cross-model portage): --model-name lets the smoke
+    # script and per-model orchestrators pick a family without a bespoke
+    # overlay config.
+    if args.model_name:
+        model_cfg["name"] = args.model_name
     model_name = model_cfg["name"]
     experiment_seed = int(cfg.get("experiment", {}).get("seed", 42))
+
+    # Cross-model portage: resolve the family up-front so stop-prefill uses the
+    # right close-tag (Gemma <|channel|>, Ministral [/THINK], DeepSeek/GLM
+    # </think>) and continuation sampling stays uniform 0.6/0.95 (Recum).
+    family = resolve_model_family(model_name)
+    set_active_model_family(model_name)
+    select_stop_prefill = make_stop_prefill_selector(model_name)
+    cont_sampling = continuation_sampling_kwargs(model_name)
+    if cont_sampling:
+        # Uniform Recum continuation sampling wins over experiment.yaml
+        # (DeepSeek runs happened to match already; Gemma/Ministral baselines
+        # differ but continuation must be uniform for a fair comparison).
+        for key, value in cont_sampling.items():
+            model_cfg[key] = value
+    print(
+        f"[cross-model] family={family.name} slug={family.slug} "
+        f"think_close={family.think_tags.close!r} "
+        f"continuation={cont_sampling}"
+    )
+
+    # Generation mode: CLI override > config > restart default.
+    generation_mode = (
+        args.generation_mode
+        or script3.get("dialogue_generation_mode", GENERATION_MODE_RESTART)
+    )
+    if generation_mode not in GENERATION_MODES:
+        print(f"Unknown generation mode: {generation_mode!r}", file=sys.stderr)
+        sys.exit(1)
+    continuation_cfg = script3.get("continuation", {}) or {}
+    is_continuation = generation_mode == GENERATION_MODE_CONTINUATION
 
     if script3.get("dialogue_mode", "three_turn") != "adaptive_alternating" and not args.dry_run:
         print(
@@ -434,11 +649,29 @@ def main() -> None:
             file=sys.stderr,
         )
 
-    baseline_path = ROOT / script3.get("baseline_file", "data/baseline_cots.jsonl")
-    injections_path = ROOT / script3.get(
-        "injections_file",
-        paths.get("injections", "data/injections_generated.jsonl"),
-    )
+    # Continuation mode reads the \n\n-joined continuation baselines (Step N:
+    # prefixes stripped); restart mode reads the legacy baseline file.
+    # CLI --baseline-file wins over both continuation.baseline_file and
+    # script3.baseline_file (cross-model orchestration).
+    if args.baseline_file is not None:
+        baseline_path = args.baseline_file if args.baseline_file.is_absolute() else ROOT / args.baseline_file
+    elif is_continuation:
+        baseline_path = ROOT / continuation_cfg.get(
+            "baseline_file", script3.get("baseline_file", "data/baseline_cots.jsonl")
+        )
+    else:
+        baseline_path = ROOT / script3.get("baseline_file", "data/baseline_cots.jsonl")
+    if args.injections_file is not None:
+        injections_path = (
+            args.injections_file
+            if args.injections_file.is_absolute()
+            else ROOT / args.injections_file
+        )
+    else:
+        injections_path = ROOT / script3.get(
+            "injections_file",
+            paths.get("injections", "data/injections_generated.jsonl"),
+        )
     out_path = (
         args.out if args.out is not None
         else ROOT / script3.get("output_file", "data/post_injection_runs.jsonl")
@@ -446,11 +679,41 @@ def main() -> None:
     transcript_path = ROOT / script3.get(
         "adaptive_dialogues_file", "data/adaptive_dialogues.jsonl"
     )
-    complete_path = ROOT / script3.get(
-        "complete_dialogues_file", "data/complete_dialogues.jsonl"
+    if args.complete_dialogues_file is not None:
+        complete_path = (
+            args.complete_dialogues_file
+            if args.complete_dialogues_file.is_absolute()
+            else ROOT / args.complete_dialogues_file
+        )
+    else:
+        complete_path = ROOT / script3.get(
+            "complete_dialogues_file", "data/complete_dialogues.jsonl"
+        )
+    # adaptive_dialogues.jsonl is a redundant subset of complete_dialogues.jsonl in
+    # continuation mode; default OFF. Set script3.write_adaptive_dialogues: true to
+    # re-enable for the legacy restart path.
+    write_adaptive_transcript = bool(script3.get("write_adaptive_dialogues", False))
+    # Prompt audit: persist the FULL rendered prompt (continuation-mode proof) for
+    # the first N dialogues; all rows still carry prompt_sha256 + token counts.
+    prompt_audit_sample = (
+        int(args.prompt_audit_sample)
+        if args.prompt_audit_sample is not None
+        else int(script3.get("prompt_audit_sample", 0))
+    )
+    prompt_audit_dir = ROOT / script3.get("prompt_audit_dir", "data/prompt_audit")
+    # Logprobs (perplexity proxy + boxed-answer distribution). int = top-k per token,
+    # None disables. Only the vLLM backend fills them; others ignore.
+    _capture_lp = script3.get("capture_logprobs", None)
+    capture_logprobs = (
+        int(_capture_lp) if _capture_lp not in (None, False, "", 0, "0") else None
     )
     timings_path = ROOT / cfg.get("script4", {}).get("output_dir", "results") / "run_timings.json"
-    tasks_path = ROOT / paths.get("tasks", "data/experiment_tasks.jsonl")
+    # CLI --tasks wins over paths.tasks and scope.tasks (smoke needs to point
+    # at data/smoke_tasks.jsonl without editing the base config).
+    if args.tasks is not None:
+        tasks_path = args.tasks if args.tasks.is_absolute() else ROOT / args.tasks
+    else:
+        tasks_path = ROOT / paths.get("tasks", "data/experiment_tasks.jsonl")
     recovery_max_tokens = int(script3.get("recovery_max_tokens", 8192))
     stop_max_tokens = int(script3.get("stop_max_new_tokens", 100))
     script4_cfg = cfg.get("script4", {})
@@ -465,7 +728,9 @@ def main() -> None:
     if args.domain:
         scope = dict(scope)
         scope["domains"] = [args.domain]
-    if scope.get("tasks"):
+    # CLI --tasks takes final precedence (cross-model smoke uses
+    # data/smoke_tasks.jsonl). scope.tasks only overrides when no CLI arg.
+    if scope.get("tasks") and args.tasks is None:
         tasks_path = ROOT / scope["tasks"]
     lists = design_lists(cfg, scope)
 
@@ -535,7 +800,8 @@ def main() -> None:
 
     inj_cfg = cfg.get("injection", {})
     claude_fn = None
-    if not args.dry_run:
+    # Continuation mode uses only pre-generated injections (no live Claude).
+    if not args.dry_run and not is_continuation:
         provider = inj_cfg.get("provider", "anthropic")
         claude_model = inj_cfg.get("model", "claude-sonnet-4-6")
         claude_fn = make_claude_fn(
@@ -552,8 +818,21 @@ def main() -> None:
         max_tokens_by_level=MAX_TOKENS,
     )
 
+    # Continuation mode caps intermediate turns at one paragraph (\n\n stop); the
+    # token cap is a safety net only.
+    trace_separator = str(continuation_cfg.get("trace_separator", "\n\n"))
+    intermediate_stop = str(continuation_cfg.get("intermediate_stop", "\n\n"))
+    if is_continuation:
+        intermediate_max_tokens = int(
+            continuation_cfg.get("intermediate_max_tokens", intermediate_max_tokens)
+        )
+
     print_run_plan(scope, tasks, lists, str(out_path))
-    print(f"Dialogue mode: adaptive_alternating | intermediate_max_tokens={intermediate_max_tokens}")
+    print(
+        f"Generation mode: {generation_mode} | "
+        f"intermediate_max_tokens={intermediate_max_tokens}"
+        + (f" | intermediate_stop={intermediate_stop!r}" if is_continuation else "")
+    )
     print(f"Planned dialogues: {planned_dialogues} | Neutral control: {run_neutral}")
     print(f"Output: {out_path}")
     print(f"Complete dialogues: {complete_path}")
@@ -565,6 +844,8 @@ def main() -> None:
     states: list[DialogueState] = []
     skipped = 0
 
+    from convert_baselines_to_continuation import strip_step_prefix  # noqa: E402
+
     for task in tasks:
         baseline = baseline_index.get(task["task_id"])
         if not baseline:
@@ -572,7 +853,14 @@ def main() -> None:
         steps = list(baseline.get("steps") or [])
         if not steps:
             continue
-        insertion_step, baseline_prefix = compute_midpoint(steps)
+        if is_continuation:
+            cont_steps = list(baseline.get("continuation_steps") or [])
+            if not cont_steps:
+                # Fallback when pointed at a non-converted baseline: strip in memory.
+                cont_steps = [s for s in (strip_step_prefix(x) for x in steps) if s]
+            insertion_step, baseline_prefix = compute_continuation_prefix(cont_steps)
+        else:
+            insertion_step, baseline_prefix = compute_midpoint(steps)
 
         conditions: list[tuple[str, str | None]] = []
         for error_type in lists["error_types"]:
@@ -603,6 +891,9 @@ def main() -> None:
 
                         pregenerated_first: str | None = None
                         agent_role_id: str | None = None
+                        all_inj_steps: list[str] = []
+                        shift_subtype: str | None = None
+                        off_topic_theme: str | None = None
                         if condition == "adversarial":
                             try:
                                 inj_steps = resolve_injection_steps(
@@ -612,12 +903,23 @@ def main() -> None:
                                     k,
                                     length_level,
                                     dry_run=args.dry_run,
-                                    # Stage A: the adaptive path only uses inj_steps[0],
-                                    # so accept step1_only pre-pass records.
-                                    allow_step1_only=True,
+                                    # Continuation consumes ALL k pre-generated steps;
+                                    # restart/adaptive only needs inj_steps[0].
+                                    allow_step1_only=not is_continuation,
                                 )
+                                all_inj_steps = list(inj_steps)
                                 pregenerated_first = inj_steps[0] if inj_steps else None
                                 agent_role_id = f"persistent_{error_type}"
+                                # Pull the injection sub-labels off the same
+                                # index-lookup key used by resolve_injection_steps.
+                                # Present only for the relevant error_type; None
+                                # for the others (Punkt 3, Feld-Propagation).
+                                inj_key = injection_key(
+                                    task["task_id"], error_type, k, length_level
+                                )
+                                inj_rec = injection_index.get(inj_key) or {}
+                                shift_subtype = inj_rec.get("shift_subtype")
+                                off_topic_theme = inj_rec.get("off_topic_theme")
                             except KeyError as exc:
                                 if not args.dry_run:
                                     print(f"[SKIP] {task['task_id']} {error_type} k={k}: {exc}")
@@ -639,6 +941,23 @@ def main() -> None:
                             agent_role_id=agent_role_id,
                             injection_tag=injection_tag,
                         )
+                        if is_continuation:
+                            state.generation_mode = GENERATION_MODE_CONTINUATION
+                            state.accumulated_trace = baseline_prefix
+                            if baseline_prefix:
+                                state.add_trace_segment("baseline_prefix", baseline_prefix)
+                            state.injection_steps = all_inj_steps
+                            # baseline_step_count = clean continuation steps used for
+                            # the midpoint split (Phase-2 recovery-inflation denominator).
+                            state.baseline_step_count = len(cont_steps)
+                            # Decoy only meaningful for false_consensus; null otherwise.
+                            if error_type == "false_consensus":
+                                state.decoy_answer = task.get("decoy_answer")
+                        # Injection sub-labels (Punkt 3) — always propagate what
+                        # Script 2 recorded; they're None for non-matching error
+                        # types (e.g. shift_subtype only exists on paraphrased_shift).
+                        state.shift_subtype = shift_subtype
+                        state.off_topic_theme = off_topic_theme
                         states.append(state)
 
     if not states:
@@ -652,6 +971,7 @@ def main() -> None:
 
     written = 0
     dialogues_completed = 0
+    audited = 0
     progress_start = time.time()
 
     def print_progress() -> None:
@@ -679,7 +999,7 @@ def main() -> None:
         )
 
     def on_dialogue_complete(state, stop_res, rec_res) -> None:
-        nonlocal written, dialogues_completed
+        nonlocal written, dialogues_completed, audited
         for variant, res in (("stop", stop_res), ("recovery", rec_res)):
             out = build_output_record(
                 state=state,
@@ -692,13 +1012,21 @@ def main() -> None:
                 stop_max_tokens=stop_max_tokens,
                 math_tolerance=math_tolerance,
                 science_tolerance=science_tolerance,
+                gen=res,
             )
             append_jsonl(out_path, out, flush=True)
             existing_keys.add(run_key_for_record(model_name, out))
             written += 1
         complete_rec = build_complete_dialogue_record(state, stop_res, rec_res)
         append_jsonl(complete_path, complete_rec, flush=True)
-        append_transcript_jsonl(transcript_path, state)
+        # Prompt audit: persist the FULL rendered prompt for the first N dialogues
+        # (continuation-mode proof: open think block + trace actually present).
+        if audited < prompt_audit_sample:
+            _write_prompt_audit(prompt_audit_dir, state, stop_res, rec_res)
+            audited += 1
+        # adaptive_dialogues.jsonl: redundant subset, off by default (see config).
+        if write_adaptive_transcript:
+            append_transcript_jsonl(transcript_path, state)
         dialogues_completed += 1
         print_progress()
 
@@ -706,21 +1034,46 @@ def main() -> None:
         threshold=int(script3.get("injection_failure_threshold", 5))
     )
     try:
-        records, completed, failed, stopped_reason = run_dialogue_until_complete(
-            states,
-            backend,
-            get_injection,
-            adaptive_from=adaptive_from,
-            intermediate_max_tokens=intermediate_max_tokens,
-            stop_max_tokens=stop_max_tokens,
-            recovery_max_tokens=recovery_max_tokens,
-            temperature=float(model_cfg.get("temperature", 0.6)),
-            top_p=float(model_cfg.get("top_p", 0.95)),
-            select_stop_prefill=select_stop_prefill,
-            on_dialogue_complete=on_dialogue_complete,
-            budget_deadline=budget_deadline,
-            injection_breaker=injection_breaker,
-        )
+        if is_continuation:
+            # Math recovery turns get a \boxed{} format instruction (parser-friendly);
+            # only when every dialogue is math so non-math output is not constrained.
+            math_only = all(
+                st.task.get("domain", "math") == "math" for st in states
+            )
+            recovery_system = MATH_RECOVERY_FORMAT_INSTRUCTION if math_only else None
+            # Deletion model: all k injections pre-generated, no live Claude barrier.
+            records, completed, failed, stopped_reason = run_continuation_dialogues(
+                states,
+                backend,
+                intermediate_max_tokens=intermediate_max_tokens,
+                stop_max_tokens=stop_max_tokens,
+                recovery_max_tokens=recovery_max_tokens,
+                temperature=float(model_cfg.get("temperature", 0.6)),
+                top_p=float(model_cfg.get("top_p", 0.95)),
+                select_stop_prefill=select_stop_prefill,
+                trace_separator=trace_separator,
+                intermediate_stop=intermediate_stop,
+                recovery_system=recovery_system,
+                on_dialogue_complete=on_dialogue_complete,
+                budget_deadline=budget_deadline,
+                logprobs=capture_logprobs,
+            )
+        else:
+            records, completed, failed, stopped_reason = run_dialogue_until_complete(
+                states,
+                backend,
+                get_injection,
+                adaptive_from=adaptive_from,
+                intermediate_max_tokens=intermediate_max_tokens,
+                stop_max_tokens=stop_max_tokens,
+                recovery_max_tokens=recovery_max_tokens,
+                temperature=float(model_cfg.get("temperature", 0.6)),
+                top_p=float(model_cfg.get("top_p", 0.95)),
+                select_stop_prefill=select_stop_prefill,
+                on_dialogue_complete=on_dialogue_complete,
+                budget_deadline=budget_deadline,
+                injection_breaker=injection_breaker,
+            )
     except InjectionCircuitBreakerError as exc:
         # Completed dialogues are already flushed per-dialogue; abort the rest.
         print(f"\n[ABORT] Injection circuit breaker tripped: {exc}", file=sys.stderr)
@@ -783,6 +1136,9 @@ def main() -> None:
         wall_time_s=total_elapsed_s,
         dialogues_completed=dialogues_completed,
         stopped_reason=stopped_reason,
+        backend=backend,
+        continuation_sampling=cont_sampling,
+        is_continuation=is_continuation,
     )
     print(f"Output: {out_path}")
     print(f"Complete dialogues: {complete_path}")

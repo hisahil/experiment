@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from math_utils import extract_boxed
+from math_utils import extract_boxed, extract_boxed_first
 
 
 FINAL_ANSWER_RE = re.compile(
@@ -133,6 +133,16 @@ _FINAL_REGION_MARKERS = (
     re.compile(r"^\s*\*\*Final\s+Equation:?\*\*", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^\s*Final\s+Answer\s*:", re.IGNORECASE | re.MULTILINE),
 )
+# Textual final-answer markers only (NO bare \boxed{}). Used to anchor a region
+# whose FIRST boxed value is the committed answer, so a trailing re-check
+# \boxed{} (pilot: "\boxed{10} ... \boxed{2}") does not win.
+_TEXTUAL_FINAL_REGION_MARKERS = (
+    re.compile(r"^\s*\*\*Final\s+Answer:?\*\*", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*\*\*Answer:?\*\*", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*\*\*Conclusion:?\*\*", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*\*\*Final\s+Equation:?\*\*", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*Final\s+Answer\s*:", re.IGNORECASE | re.MULTILINE),
+)
 _FUNCTION_RHS_RE = re.compile(r"^[A-Za-z]+\([^)]*\)\s*=\s*(.+)$")
 _COUNT_ANSWER_RE = re.compile(
     r"(?:^|there\s+are|is)\s*(\d+)\s+possible",
@@ -153,12 +163,26 @@ _SYMBOLIC_EQUATION_RE = re.compile(
 
 
 def _strip_thinking_suffix(text: str) -> str:
-    """Prefer model text after a closing thinking tag when present."""
-    marker = "</think>"
+    """Prefer model text after the family close-tag when present.
+
+    Resolves the close-tag from the process-wide active model family
+    (`model_family.get_think_tags()`), so Gemma's `<|channel|>` and Ministral's
+    `[/THINK]` are stripped correctly. Falls back to `</think>` for the default
+    family (DeepSeek/GLM/Phi-4), matching legacy behaviour.
+
+    Import is deferred to keep evaluator import-cheap and avoid any potential
+    circular dependency; the model_family module has no evaluator dependency.
+    """
+    try:
+        from model_family import get_think_tags
+
+        marker = get_think_tags().close
+    except Exception:
+        marker = "</think>"
     idx = text.rfind(marker)
     if idx == -1:
         return text
-    after = text[idx + len(marker) :].strip()
+    after = text[idx + len(marker):].strip()
     return after or text
 
 
@@ -227,6 +251,23 @@ def _locate_final_answer_region(body: str) -> str | None:
     return body[last_start:]
 
 
+def _locate_textual_marker_region(body: str) -> str | None:
+    """Return text from the last TEXTUAL final-answer marker through the end.
+
+    Unlike _locate_final_answer_region this ignores bare \\boxed{} markers, so the
+    region is anchored on an explicit "Final Answer"/"Answer"/"Conclusion" line.
+    Inside such a region the FIRST boxed value is the committed answer.
+    """
+    last_start: int | None = None
+    for pattern in _TEXTUAL_FINAL_REGION_MARKERS:
+        for match in pattern.finditer(body):
+            if last_start is None or match.start() > last_start:
+                last_start = match.start()
+    if last_start is None:
+        return None
+    return body[last_start:]
+
+
 def _coerce_math_answer_candidate(candidate: str) -> str | None:
     """Pull a gradable math answer out of a marker line or short prose."""
     if not candidate:
@@ -281,11 +322,17 @@ def _coerce_math_answer_candidate(candidate: str) -> str | None:
     return None
 
 
-def _extract_math_answer_from_slice(slice_text: str, *, allow_flow_heuristics: bool) -> str | None:
+def _extract_math_answer_from_slice(
+    slice_text: str,
+    *,
+    allow_flow_heuristics: bool,
+    prefer_first_boxed: bool = False,
+) -> str | None:
     """
     Parse order inside a text slice (most explicit first, loosest last):
 
-    1. Last \\boxed{} in slice
+    1. \\boxed{} in slice (last by default; FIRST when prefer_first_boxed, i.e. the
+       slice is anchored on an explicit textual final-answer marker)
     2. Explicit marker blocks (**Final Answer:** / **Answer:** / **Conclusion:**)
     3. Marker-line captures (**Answer:** value on same line)
     4. [flow] bold-wrapped final phrases (...is **32**, there are **4** ...): last match wins
@@ -296,7 +343,7 @@ def _extract_math_answer_from_slice(slice_text: str, *, allow_flow_heuristics: b
     heuristic so a definitional mid-text "is \\(formula\\)" cannot beat the real
     final "**value**" near the end.
     """
-    boxed = extract_boxed(slice_text)
+    boxed = extract_boxed_first(slice_text) if prefer_first_boxed else extract_boxed(slice_text)
     if boxed is not None:
         return boxed
 
@@ -356,6 +403,14 @@ def _extract_math_answer_from_slice(slice_text: str, *, allow_flow_heuristics: b
 # L2: concluding-prose answer fallbacks (only the final 1-3 lines are inspected,
 # so intermediate-reasoning equations are never picked up).
 _PROSE_TUPLE_RE = re.compile(r"\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)")
+# A coordinate tuple bound to a point label, e.g. "point P is (8, -2)",
+# "P = (8,-2)", "coordinates of P are (8,-2)". MATH-500 geometry usually asks for
+# a specific point (commonly P), while a given point (A) also appears in the text;
+# binding to the label avoids returning the given point instead of the asked one.
+_LABELED_POINT_TUPLE_RE = re.compile(
+    r"\b([A-Z])\b\s*(?:=|is|are|:|\bare\b|\bis\b)?[^()\n]{0,30}?"
+    r"(\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\))",
+)
 _PROSE_NUMBER_RE = re.compile(
     r"(?:is|are|of|equals?|:)\s+(?:approximately\s+|about\s+|\$)?\s*"
     r"([-+]?\d+(?:\.\d+)?(?:\s*/\s*\d+)?)\s*%?\s*\.?\s*$",
@@ -371,9 +426,14 @@ def _extract_prose_final_answer(body: str) -> str | None:
     """
     lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
     for line in reversed(lines[-3:]):
-        tup = _PROSE_TUPLE_RE.search(line)
-        if tup:
-            return re.sub(r"\s+", "", tup.group(0))
+        labeled = _select_labeled_point_tuple(line)
+        if labeled:
+            return re.sub(r"\s+", "", labeled)
+        tups = _PROSE_TUPLE_RE.findall(line)
+        if tups:
+            # The asked answer usually trails the sentence ("..., so P is (8,-2).");
+            # take the LAST tuple, not a given point mentioned earlier in the line.
+            return re.sub(r"\s+", "", tups[-1])
         if len(line) <= 200:
             num = _PROSE_NUMBER_RE.search(line)
             if num:
@@ -381,11 +441,28 @@ def _extract_prose_final_answer(body: str) -> str | None:
     return None
 
 
-def _extract_math_answer(text: str) -> str | None:
+def _select_labeled_point_tuple(line: str) -> str | None:
+    """Return a coordinate tuple bound to a point label, preferring 'P'.
+
+    "Point A is (10,-10), so point P is (8,-2)" -> "(8,-2)" (P, the asked point).
+    With no 'P', the last labeled tuple wins (conclusions trail the answer).
     """
-    Math answer extraction for recovery runs.
+    matches = _LABELED_POINT_TUPLE_RE.findall(line)
+    if not matches:
+        return None
+    for label, tup in matches:
+        if label == "P":
+            return tup
+    return matches[-1][1]
+
+
+def _extract_math_answer(text: str, *, prefer_first_boxed: bool = False) -> str | None:
+    """
+    Math answer extraction for stop/recovery runs.
 
     Stop variant uses a \\boxed{ prefill, so answers are almost always parseable.
+    When prefer_first_boxed is True (stop runs), use the first \\boxed{} — the
+    answer committed at the prefill point, not post-stop continuation.
     Recovery has no prefill; the model often emits **Answer:** / **Final Answer:**
     blocks instead of \\boxed{}.
 
@@ -395,15 +472,34 @@ def _extract_math_answer(text: str) -> str | None:
     stripped = text.strip()
     body = _strip_thinking_suffix(stripped)
 
+    # Prefer a region anchored on an explicit TEXTUAL marker (Final Answer / Answer
+    # / Conclusion). There the FIRST boxed value is the committed answer, so a
+    # trailing re-check "\boxed{2}" cannot override the real "\boxed{10}".
+    textual_region = _locate_textual_marker_region(body)
+    if textual_region is not None:
+        answer = _extract_math_answer_from_slice(
+            textual_region, allow_flow_heuristics=False, prefer_first_boxed=True
+        )
+        if answer is not None:
+            return _normalize_math_extracted(answer)
+
     final_region = _locate_final_answer_region(body)
     if final_region is not None:
-        answer = _extract_math_answer_from_slice(final_region, allow_flow_heuristics=False)
+        answer = _extract_math_answer_from_slice(
+            final_region,
+            allow_flow_heuristics=False,
+            prefer_first_boxed=prefer_first_boxed,
+        )
         if answer is not None:
             return _normalize_math_extracted(answer)
 
     # No explicit final marker: fall back to tail window with flow heuristics.
     tail = body[-_MATH_TAIL_WINDOW:] if len(body) > _MATH_TAIL_WINDOW else body
-    answer = _extract_math_answer_from_slice(tail, allow_flow_heuristics=True)
+    answer = _extract_math_answer_from_slice(
+        tail,
+        allow_flow_heuristics=True,
+        prefer_first_boxed=prefer_first_boxed,
+    )
     if answer is not None:
         return _normalize_math_extracted(answer)
 
@@ -420,7 +516,8 @@ def _extract_math_answer(text: str) -> str | None:
     # marker yields None (truly ungradable).
     boxed_all = BOXED_RE.findall(stripped)
     if boxed_all:
-        return _normalize_math_extracted(boxed_all[-1])
+        pick = boxed_all[0] if prefer_first_boxed else boxed_all[-1]
+        return _normalize_math_extracted(pick)
     return None
 
 
@@ -492,20 +589,26 @@ def _extract_truth_value(text: str) -> str | None:
     return {"true": "True", "false": "False", "uncertain": "Uncertain"}[canon]
 
 
-def extract_domain_answer(text: str, domain: str, eval_type: str | None = None) -> str | None:
+def extract_domain_answer(
+    text: str,
+    domain: str,
+    eval_type: str | None = None,
+    *,
+    prefer_first_boxed: bool = False,
+) -> str | None:
     """
     Domain-specific answer extraction for Script 3 stop/recovery outputs.
 
     Inputs are per-run raw completions (not aggregated accuracies).
 
-    Math: \\boxed{} first (stop prefill), then recovery-style markers
-    (**Answer:**, **Final Answer:**, trailing display math).
+    Math: \\boxed{} first (stop prefill uses prefer_first_boxed=True), then
+    recovery-style markers (**Answer:**, **Final Answer:**, trailing display math).
     Science uses open-ended numeric extraction (SciBench). Falls back to the
     'Final answer:' line when domain patterns do not match.
     """
     stripped = text.strip()
     if domain == "math":
-        answer = _extract_math_answer(stripped)
+        answer = _extract_math_answer(stripped, prefer_first_boxed=prefer_first_boxed)
         if answer is not None:
             return answer
     elif domain == "science":

@@ -1,7 +1,23 @@
 #!/usr/bin/env bash
 # GPU environment setup — RunPod A100 80GB (CUDA 12.8 / 13.0, driver 570+)
-# Usage: bash scripts/setup_gpu.sh
+#
+# Usage:
+#   bash scripts/setup_gpu.sh            # default: legacy DeepSeek env (vLLM 0.6.6)
+#   bash scripts/setup_gpu.sh cross      # cross-model env (vLLM 0.12+, mistral_common,
+#                                        # transformers 5.0.0rc0) — required for
+#                                        # GLM-Z1 / Gemma-4 / Ministral-3
+#
+# Cross-model rationale:
+#   - GLM-Z1-9B          → needs --reasoning-parser glm45   (vLLM 0.7+)
+#   - google/gemma-4-12B → needs --reasoning-parser gemma   (vLLM 0.11+)
+#   - Ministral-3-14B    → needs --tokenizer_mode mistral   (vLLM 0.12 + mistral_common>=1.8.6
+#                                                          + transformers 5.0.0rc0)
+# Deep DeepSeek regression: re-run tests/test_continuation_prompt.py after
+# upgrading; then a 5-task smoke on 1.5B via scripts/smoke_cross_model.py to
+# catch bit-level tokenisation shifts before touching new models.
 set -euo pipefail
+
+MODE="${1:-legacy}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -42,13 +58,28 @@ free, total = torch.cuda.mem_get_info(0)
 print(f'  VRAM  {free/1e9:.1f} GB free / {total/1e9:.1f} GB total')
 "
 
-# ── vLLM 0.6.6 + pinned transformers (avoid ProcessorMixin / float8 conflicts) ─
-echo "==> Installing vLLM 0.6.6 + pinned deps..."
-pip install vllm==0.6.6 --quiet
-pip install "transformers>=4.44.0,<4.46" --quiet
+if [[ "$MODE" == "cross" ]]; then
+  # ── Cross-model env: vLLM 0.12+, mistral_common, transformers 5.0.0rc0 ─────
+  echo "==> [cross-model] Installing vLLM 0.12.x + mistral_common + transformers 5.0.0rc0..."
+  pip install --upgrade "vllm>=0.12.0,<0.13.0" --quiet
+  pip install --upgrade "mistral_common>=1.8.6" --quiet
+  pip install --upgrade "transformers==5.0.0rc0" --quiet
+  pip install --upgrade "tokenizers>=0.20" --quiet
+else
+  # ── Legacy DeepSeek env: vLLM 0.6.6 + pinned transformers ─────────────────
+  # (avoid ProcessorMixin / float8 conflicts; matches the historical DeepSeek
+  # runs used as our baseline).
+  echo "==> [legacy DeepSeek] Installing vLLM 0.6.6 + pinned deps..."
+  pip install vllm==0.6.6 --quiet
+  pip install "transformers>=4.44.0,<4.46" --quiet
+fi
 
 echo "==> Verifying vLLM import..."
-python -c "from vllm import LLM; print('  vLLM import OK')"
+python -c "from vllm import LLM; import vllm; print(f'  vLLM {vllm.__version__} import OK')"
+if [[ "$MODE" == "cross" ]]; then
+  python -c "import mistral_common; print(f'  mistral_common {mistral_common.__version__}')" || true
+  python -c "import transformers; print(f'  transformers {transformers.__version__}')"
+fi
 
 # ── Remaining deps ─────────────────────────────────────────────────────────────
 echo "==> Installing remaining dependencies..."
@@ -71,8 +102,21 @@ if [[ -z "${HF_TOKEN:-}" && -z "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
   echo ""
   echo "NOTE: DeepSeek-R1-Distill-Qwen-32B is public — no token required."
   echo "If you hit a rate-limit error, set: export HF_TOKEN=your_token_here"
+  if [[ "$MODE" == "cross" ]]; then
+    echo ""
+    echo "WARNING: Gemma-4 (google/*) and Ministral (mistralai/*) are GATED."
+    echo "  1. Accept the licence on the model page while logged into HF (once per account)."
+    echo "  2. Set HF_TOKEN with read access to those namespaces."
+    echo "     https://huggingface.co/google/gemma-4-12B-it"
+    echo "     https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512"
+  fi
 else
   echo "==> Hugging Face token detected."
+  if [[ "$MODE" == "cross" ]]; then
+    echo "    Verify gated-model access with: hf auth whoami"
+    echo "    Ensure Terms accepted for google/gemma-4-12B-it and"
+    echo "    mistralai/Ministral-3-14B-Reasoning-2512."
+  fi
 fi
 
 mkdir -p outputs logs data

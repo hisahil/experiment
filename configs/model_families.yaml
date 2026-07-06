@@ -1,0 +1,183 @@
+# Per-model-family settings for cross-model experiments (Phase 0+).
+#
+# How lookups work:
+#   resolve_model_family(model_name) matches model_name (case-insensitive) against
+#   `match` substrings; first match wins; unmatched names fall back to `default`.
+#
+# Fields:
+#   slug                    Filesystem-safe model identifier (used for
+#                           data/baselines/<slug>/, results/<slug>/, config
+#                           overlays configs/experiment_<slug>.yaml).
+#                           MUST be unique across families — no short_model_name
+#                           heuristic (Ministral-14B would collide with DeepSeek-14B).
+#   think_tags.open/close   Model's reasoning delimiters. Continuation-mode
+#                           string-based matching / stop-prefill / recovery
+#                           parsing all key off `close`.
+#   think_tags.trigger      Token or string that must appear in the SYSTEM prompt
+#                           to enable thinking (Gemma). null = template does it.
+#   think_tags.keep_in_history  Ministral recommends keeping reasoning traces in
+#                           context. Continuation mode already packs the full
+#                           trace into a single-turn prompt, so this is
+#                           informational; adaptive_dialogue must NOT strip.
+#   tokenizer_extra_kwargs  Extra kwargs for apply_chat_template (Gemma:
+#                           enable_thinking=True).
+#   baseline_sampling       Script 1 sampling (Recum-konform: per Model Card).
+#                           MUST include temperature; top_p and top_k optional.
+#   vllm_serve.flags        Extra CLI flags for `vllm serve` (--reasoning-parser,
+#                           --trust-remote-code, --tokenizer_mode mistral, ...).
+#   vllm_engine.max_model_len   Prompt + generation cap for KV cache fit.
+#   vllm_engine.gpu_memory_utilization   Passed to vllm.LLM(...).
+#
+# Continuation-mode sampling is UNIFORM across all families (Recum Table 15,
+# post-intervention row). Defined once below, not per family.
+
+continuation_sampling:
+  temperature: 0.6
+  top_p: 0.95
+  # No top_k — Recum uses N/A across all evaluated models here.
+
+families:
+  deepseek:
+    match:
+      - DeepSeek-R1-Distill
+      - deepseek-r1
+      - deepseek-ai/DeepSeek
+    slug: deepseek  # legacy per-checkpoint slugs (1.5b/7b/14b/32b) are kept
+                    # separate; this base family only supplies tag/sampling
+                    # defaults and is never used as a filesystem slug.
+    think_tags:
+      open: "<think>"
+      close: "</think>"
+      trigger: null
+      keep_in_history: false
+    tokenizer_extra_kwargs: {}
+    baseline_sampling:
+      temperature: 0.6
+      top_p: 0.95
+    vllm_serve:
+      flags: []
+    vllm_engine:
+      max_model_len: 16384
+      gpu_memory_utilization: 0.92
+
+  glm_z1_9b:
+    match:
+      - GLM-Z1-9B
+      - glm-z1-9b
+    slug: glm-z1-9b
+    think_tags:
+      open: "<think>"
+      close: "</think>"
+      trigger: null
+      keep_in_history: false
+    tokenizer_extra_kwargs: {}
+    baseline_sampling:
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 40
+    vllm_serve:
+      flags:
+        - "--reasoning-parser"
+        - "glm45"
+        - "--trust-remote-code"
+    vllm_engine:
+      max_model_len: 16384
+      gpu_memory_utilization: 0.90
+
+  gemma_4_12b:
+    match:
+      - gemma-4-12B
+      - gemma-4-12b
+      - google/gemma-4-12
+    slug: gemma-4-12b
+    think_tags:
+      # NOTE: exact spelling verified via smoke_cross_model.py prompt_audit.
+      # Documented as `<|channel|>thought\n` ... `<|channel|>`; adjust here
+      # if the smoke shows a different literal.
+      open: "<|channel|>thought\n"
+      close: "<|channel|>"
+      trigger: "<|think|>"
+      keep_in_history: false
+    tokenizer_extra_kwargs:
+      enable_thinking: true
+    baseline_sampling:
+      temperature: 1.0
+      top_p: 0.95
+      top_k: 64
+    vllm_serve:
+      flags:
+        - "--reasoning-parser"
+        - "gemma"
+    vllm_engine:
+      # Gemma 4 12B native ctx = 256K; capped at 16384 for KV cache on 80GB
+      # (matches our DeepSeek cap; enough for baseline + k=3 continuation).
+      max_model_len: 16384
+      gpu_memory_utilization: 0.90
+
+  ministral_3_14b:
+    match:
+      - Ministral-3-14B
+      - ministral-3-14b
+    slug: ministral-3-14b
+    think_tags:
+      # Ministral/Magistral reasoning-parser format; verify literal via smoke.
+      open: "[THINK]"
+      close: "[/THINK]"
+      trigger: null
+      keep_in_history: true
+    tokenizer_extra_kwargs: {}
+    baseline_sampling:
+      temperature: 1.0
+      top_p: 0.95
+    vllm_serve:
+      flags:
+        - "--tokenizer_mode"
+        - "mistral"
+        - "--config_format"
+        - "mistral"
+        - "--load_format"
+        - "mistral"
+        - "--reasoning-parser"
+        - "mistral"
+    vllm_engine:
+      max_model_len: 16384
+      gpu_memory_utilization: 0.90
+
+  phi_4_reasoning:
+    match:
+      - Phi-4-reasoning
+      - phi-4-reasoning
+    slug: phi-4-reasoning
+    think_tags:
+      open: "<think>"
+      close: "</think>"
+      trigger: null
+      keep_in_history: false
+    tokenizer_extra_kwargs: {}
+    baseline_sampling:
+      temperature: 0.6
+      top_p: 0.95
+    vllm_serve:
+      flags: []
+    vllm_engine:
+      max_model_len: 16384
+      gpu_memory_utilization: 0.92
+
+default:
+  # Applied when no family matches. Keeps DeepSeek behaviour so legacy paths
+  # (dry-run backends, transformers fallback with a generic model) still work.
+  slug: default
+  think_tags:
+    open: "<think>"
+    close: "</think>"
+    trigger: null
+    keep_in_history: false
+  tokenizer_extra_kwargs: {}
+  baseline_sampling:
+    temperature: 0.6
+    top_p: 0.95
+  vllm_serve:
+    flags: []
+  vllm_engine:
+    max_model_len: 16384
+    gpu_memory_utilization: 0.92

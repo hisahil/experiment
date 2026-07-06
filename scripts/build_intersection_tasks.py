@@ -59,12 +59,29 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def short_model_name(model: str) -> str:
-    """deepseek-ai/DeepSeek-R1-Distill-Qwen-7B -> 7b (best-effort, else slug)."""
-    tail = model.rsplit("/", 1)[-1].lower()
-    for token in tail.replace("-", " ").split():
-        if token.endswith("b") and token[:-1].replace(".", "").isdigit():
-            return token
-    return tail
+    """Filesystem-safe short model slug (used as JSON field name suffix).
+
+    Cross-model portage: for known model families (Gemma, GLM-Z1, Ministral,
+    Phi-4-reasoning) return the explicit family slug from
+    `configs/model_families.yaml`. This avoids the historical collision where
+    `Ministral-3-14B` and `DeepSeek-R1-Distill-Qwen-14B` both mapped to `14b`.
+
+    DeepSeek keeps its legacy per-checkpoint short slugs (1.5b/7b/14b/32b) so
+    existing `data/baselines/{7b,14b,32b}/` layouts stay intact.
+    """
+    try:
+        # Deferred import so this module works standalone (used by dry-run tests).
+        sys.path.insert(0, str(ROOT / "src"))
+        from model_family import model_slug  # noqa: WPS433
+
+        return model_slug(model)
+    except Exception:
+        # Last-resort heuristic; only reached if model_family.yaml cannot be read.
+        tail = model.rsplit("/", 1)[-1].lower()
+        for token in tail.replace("-", " ").split():
+            if token.endswith("b") and token[:-1].replace(".", "").isdigit():
+                return token
+        return tail
 
 
 def main() -> None:

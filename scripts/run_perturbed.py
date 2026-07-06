@@ -121,24 +121,37 @@ from llm_backend import (  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs/experiment.yaml"
 
-STOP_PREFILL = {
-    # L4: emit </think> before the prose so the boxed value is generated AFTER the
-    # think tag and the parser finds it without the L1 in-think fallback.
-    "math": "</think>\n\nTherefore, the final answer is \\boxed{",
-}
+# Cross-model portage: stop-prefill is now built from the active model family's
+# think close-tag + a domain suffix (Gemma/Ministral need different close tags
+# than DeepSeek's </think>). The suffixes themselves are unchanged.
+#
+# Kept as module-level names for backward compat: existing tests / other
+# scripts still import STOP_PREFILL_NUMERIC_SCIENCE / STOP_PREFILL_LOGIC.
+from model_family import (  # noqa: E402
+    STOP_PREFILL_LOGIC,
+    STOP_PREFILL_NUMERIC_SCIENCE,
+    build_stop_prefill,
+)
 
-# SciBench (numeric) and logic (K&K) use domain-specific prefills below.
-STOP_PREFILL_NUMERIC_SCIENCE = "\n\nTherefore, the final answer is "
-STOP_PREFILL_LOGIC = "\n\nFinal answer: "
+# Legacy dict for callers that used to look up prefills directly. Kept
+# non-empty so nobody accidentally hard-codes </think> going forward.
+STOP_PREFILL = {
+    # Populated per call via build_stop_prefill(); kept as a sentinel.
+    "math": None,
+}
 
 
 def select_stop_prefill(domain: str, eval_type: str | None) -> str:
-    """Choose the stop-variant prefill by domain and eval_type."""
-    if domain == "science" and eval_type == "numeric":
-        return STOP_PREFILL_NUMERIC_SCIENCE
-    if domain == "logic":
-        return STOP_PREFILL_LOGIC
-    return STOP_PREFILL.get(domain, STOP_PREFILL["math"])
+    """Choose the stop-variant prefill for the CURRENT active model family.
+
+    Delegates to model_family.build_stop_prefill(), which uses
+    `get_active_model_family().think_tags.close` — so DeepSeek gets
+    `</think>\\n\\nTherefore...`, Gemma gets `<|channel|>\\n\\nTherefore...`,
+    and Ministral gets `[/THINK]\\n\\nTherefore...`. Set the active family via
+    `set_active_model_family(model_name)` before dialogue generation (done
+    automatically inside `create_backend`).
+    """
+    return build_stop_prefill(domain, eval_type)
 
 
 def deterministic_grade(
@@ -326,7 +339,9 @@ def build_output_record(
     science_tolerance: float = 1e-2,
 ) -> dict:
     domain = task.get("domain", baseline.get("domain", "math"))
-    extracted = extract_domain_answer(raw_output, domain, eval_type)
+    extracted = extract_domain_answer(
+        raw_output, domain, eval_type, prefer_first_boxed=(variant == "stop")
+    )
     gold = str(task.get("gold_answer", baseline.get("gold_answer", "")))
     # L0: deterministic grading only — the LLM judge runs post-hoc in
     # scripts/judge_runs.py, so the GPU run has no Anthropic dependency. correct

@@ -1,0 +1,22 @@
+# Cross-model experiment dependencies (Phase 0+).
+#
+# Applied on top of the legacy DeepSeek env when running new families:
+#   - GLM-Z1-9B          (--reasoning-parser glm45)
+#   - google/gemma-4-12B (--reasoning-parser gemma)
+#   - Ministral-3-14B    (--tokenizer_mode mistral + --reasoning-parser mistral)
+#
+# NOTE: vLLM 0.6.6 (legacy) does NOT know these reasoning parsers. Upgrading to
+# 0.12+ may shift DeepSeek tokenisation slightly; re-run
+# scripts/smoke_cross_model.py --model deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+# after the upgrade and diff against the legacy 1.5B baseline before touching
+# the new models (see plan R14).
+#
+# Install (RunPod / A100):
+#   bash scripts/setup_gpu.sh cross
+# or manually:
+#   pip install -r requirements-cross-model.txt
+
+vllm>=0.12.0,<0.13.0
+mistral_common>=1.8.6
+transformers==5.0.0rc0
+tokenizers>=0.20

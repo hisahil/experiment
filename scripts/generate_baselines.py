@@ -70,6 +70,7 @@ from evaluator import (  # noqa: E402
     gross_numeric_mismatch,
 )
 from llm_backend import create_backend  # noqa: E402
+from model_family import apply_baseline_sampling, resolve_model_family  # noqa: E402
 
 DEFAULT_BASELINE_CONFIG = ROOT / "configs/baseline_generation.yaml"
 DEFAULT_EXPERIMENT_CONFIG = ROOT / "configs/experiment.yaml"
@@ -233,11 +234,16 @@ def generate_baseline(
     seed: int | None = None,
 ) -> tuple[str, list[str], str]:
     prompt = render_prompt(prompt_template, task=task["prompt"])
+    # top_k is a Card-recommended sampling knob (Gemma=64, GLM=40); only
+    # relevant during baseline generation. Continuation-mode (Script 3b) stays
+    # uniform without top_k across all families (Recum Table 15).
+    top_k = model_cfg.get("top_k")
     result = backend.generate(
         prompt=prompt,
         max_new_tokens=int(model_cfg.get("max_new_tokens", 2048)),
         temperature=float(model_cfg.get("temperature", 0.6)),
         top_p=float(model_cfg.get("top_p", 0.95)),
+        top_k=int(top_k) if top_k is not None else None,
         seed=seed,
     )
     raw_text = result.text
@@ -376,7 +382,16 @@ def main() -> None:
         )
 
     for model_name in models:
-        run_model_cfg = {**model_cfg, "name": model_name}
+        # Overlay Card-recommended baseline sampling (Recum-konform, Option A):
+        # Gemma temp=1.0 top_k=64, GLM top_k=40, Ministral temp=1.0, DeepSeek
+        # 0.6/0.95. Continuation-mode (Script 3b) keeps uniform 0.6/0.95.
+        run_model_cfg = apply_baseline_sampling({**model_cfg, "name": model_name}, model_name)
+        family = resolve_model_family(model_name)
+        print(
+            f"  [family={family.name} slug={family.slug}] baseline sampling: "
+            f"temp={run_model_cfg.get('temperature')} top_p={run_model_cfg.get('top_p')} "
+            f"top_k={run_model_cfg.get('top_k')}"
+        )
         for task in tasks:
             key = f"{task['task_id']}|{model_name}"
             if key in verified_keys:
@@ -540,6 +555,7 @@ def main() -> None:
                 "step_count": chosen.get("step_count", 0),
                 "gold_answer": gold,
                 "parsed_answer": chosen.get("parsed_answer"),
+                "correct": bool(chosen.get("correct")) if verified else False,
                 "verified": verified,
                 "solve_rate": solve_rate,
                 "n_verification_samples": n_samples,

@@ -3,8 +3,8 @@
 #
 # Usage:
 #   bash scripts/setup_gpu.sh            # default: legacy DeepSeek env (vLLM 0.6.6)
-#   bash scripts/setup_gpu.sh cross      # cross-model env (vLLM 0.12+, mistral_common,
-#                                        # transformers 5.0.0rc0) — required for
+#   bash scripts/setup_gpu.sh cross      # cross-model env (vLLM 0.24+, mistral_common,
+#                                        # transformers git) — required for
 #                                        # GLM-Z1 / Gemma-4 / Ministral-3
 #
 # Cross-model rationale:
@@ -41,11 +41,34 @@ source .venv/bin/activate
 echo "==> Upgrading pip..."
 pip install --upgrade pip --quiet
 
-# ── PyTorch cu121 (CUDA 12.1 wheel; compatible with driver 570 / CUDA 13.0) ───
-# Do NOT install latest torch+vllm from PyPI — vllm 0.22+ links libcudart.so.13
-# while torch cu128 ships libcudart.so.12, causing ImportError at runtime.
-echo "==> Installing PyTorch 2.5.1 (cu121)..."
-pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121 --quiet
+# ── PyTorch cu128 (RunPod CUDA 12.8+; pairs with vLLM 0.20+) ─────────────────
+# Legacy DeepSeek (vLLM 0.6.6) still uses cu121 below in the else branch only.
+echo "==> Installing PyTorch..."
+if [[ "$MODE" == "cross" ]]; then
+  # vLLM 0.24 pins torch; avoids download.pytorch.org SSL issues on some RunPod images.
+  echo "    (cross) deferring torch to vLLM 0.24.0 dependency resolution"
+else
+  pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121 --quiet
+fi
+
+if [[ "$MODE" == "cross" ]]; then
+  # ── Cross-model env: vLLM 0.24+, mistral_common, transformers (git) ────────
+  echo "==> [cross-model] Installing vLLM 0.24.x (gemma4_unified) + mistral_common + transformers (git)..."
+  pip install --upgrade "vllm==0.24.0" --quiet
+  pip install --upgrade "mistral_common>=1.8.6" --quiet
+  # Gemma-4 needs gemma4_unified (not in transformers 5.0.0rc0 PyPI wheel).
+  pip install --upgrade "git+https://github.com/huggingface/transformers.git" --quiet
+  # transformers 5.x requires tokenizers<=0.23.0; vLLM deps may pull 0.23.1 — pin.
+  pip install --upgrade "tokenizers==0.22.2" --quiet
+else
+  # ── Legacy DeepSeek env: vLLM 0.6.6 + pinned transformers ─────────────────
+  # (avoid ProcessorMixin / float8 conflicts; matches the historical DeepSeek
+  # runs used as our baseline).
+  echo "==> [legacy DeepSeek] Installing vLLM 0.6.6 + pinned deps..."
+  pip install vllm==0.6.6 --quiet
+  pip install "transformers>=4.44.0,<4.46" --quiet
+fi
+
 
 echo "==> Verifying CUDA..."
 python -c "
@@ -57,22 +80,6 @@ print(f'  GPU   {torch.cuda.get_device_name(0)}')
 free, total = torch.cuda.mem_get_info(0)
 print(f'  VRAM  {free/1e9:.1f} GB free / {total/1e9:.1f} GB total')
 "
-
-if [[ "$MODE" == "cross" ]]; then
-  # ── Cross-model env: vLLM 0.12+, mistral_common, transformers 5.0.0rc0 ─────
-  echo "==> [cross-model] Installing vLLM 0.12.x + mistral_common + transformers 5.0.0rc0..."
-  pip install --upgrade "vllm>=0.12.0,<0.13.0" --quiet
-  pip install --upgrade "mistral_common>=1.8.6" --quiet
-  pip install --upgrade "transformers==5.0.0rc0" --quiet
-  pip install --upgrade "tokenizers>=0.20" --quiet
-else
-  # ── Legacy DeepSeek env: vLLM 0.6.6 + pinned transformers ─────────────────
-  # (avoid ProcessorMixin / float8 conflicts; matches the historical DeepSeek
-  # runs used as our baseline).
-  echo "==> [legacy DeepSeek] Installing vLLM 0.6.6 + pinned deps..."
-  pip install vllm==0.6.6 --quiet
-  pip install "transformers>=4.44.0,<4.46" --quiet
-fi
 
 echo "==> Verifying vLLM import..."
 python -c "from vllm import LLM; import vllm; print(f'  vLLM {vllm.__version__} import OK')"

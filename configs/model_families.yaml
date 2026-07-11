@@ -65,6 +65,11 @@ families:
       - GLM-Z1-9B
       - glm-z1-9b
     slug: glm-z1-9b
+    # GLM emits "Step N:" INSIDE the think block (draft) AND after </think>
+    # (fair copy). Strip the think block before segmentation so parse_numbered_steps
+    # only sees the post-</think> fair copy — matches DeepSeek's structure.
+    # Flat-text prompt kept (baseline_use_chat_template stays false) for DeepSeek alignment.
+    baseline_strip_think: true
     think_tags:
       open: "<think>"
       close: "</think>"
@@ -90,6 +95,8 @@ families:
       - gemma-4-12b
       - google/gemma-4-12
     slug: gemma-4-12b
+    baseline_prompt: prompts/baseline_generation_gemma.txt
+    baseline_use_chat_template: true
     think_tags:
       # NOTE: exact spelling verified via smoke_cross_model.py prompt_audit.
       # Documented as `<|channel|>thought\n` ... `<|channel|>`; adjust here
@@ -104,6 +111,8 @@ families:
       temperature: 1.0
       top_p: 0.95
       top_k: 64
+      max_new_tokens: 8192
+      repetition_penalty: 1.05
     vllm_serve:
       flags:
         - "--reasoning-parser"
@@ -112,7 +121,10 @@ families:
       # Gemma 4 12B native ctx = 256K; capped at 16384 for KV cache on 80GB
       # (matches our DeepSeek cap; enough for baseline + k=3 continuation).
       max_model_len: 16384
-      gpu_memory_utilization: 0.90
+      gpu_memory_utilization: 0.85
+      # Text-only MATH: skip vision encoder profiling (vLLM 0.24 VRAM spike).
+      limit_mm_per_prompt:
+        image: 0
 
   ministral_3_14b:
     match:
@@ -139,6 +151,46 @@ families:
         - "mistral"
         - "--reasoning-parser"
         - "mistral"
+    vllm_engine:
+      max_model_len: 16384
+      gpu_memory_utilization: 0.90
+      # Python-API kwargs — REQUIRED. Without these, VLLMBackend loads the HF
+      # tokenizer which does not know Mistral's chat template, and the model
+      # emits [/INST]/[SYSTEM_PROMPT]/[/RESPONSE] tokens into the output
+      # (chat-template leak observed at 22% of Ministral traces in smoke).
+      tokenizer_mode: mistral
+      config_format: mistral
+      load_format: mistral
+    # Additional stop tokens beyond the standard EOS. Prevents Ministral from
+    # continuing generation after self-emitting Mistral chat tokens.
+    stop_tokens:
+      - "[INST]"
+      - "[/INST]"
+      - "</s>"
+      - "[/RESPONSE]"
+      - "[SYSTEM_PROMPT]"
+
+  olmo_3_7b_think:
+    match:
+      - Olmo-3-7B-Think
+      - olmo-3-7b
+      - allenai/Olmo-3
+    slug: olmo-3-7b
+    # Think variant emits <think>...</think> (Ai2 card).
+    # baseline_strip_think / baseline_use_chat_template: decide after smoke (O3/O4).
+    think_tags:
+      open: "<think>"
+      close: "</think>"
+      trigger: null
+      keep_in_history: false
+    tokenizer_extra_kwargs: {}
+    baseline_sampling:
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 50
+    vllm_serve:
+      flags:
+        - "--trust-remote-code"
     vllm_engine:
       max_model_len: 16384
       gpu_memory_utilization: 0.90

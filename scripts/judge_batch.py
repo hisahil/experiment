@@ -107,14 +107,18 @@ def build_request(idx: int, row: dict, task: dict | None, judge_cfg: dict) -> di
     if not question:
         question = str(row.get("question", ""))
 
-    extracted = extract_domain_answer(raw_output, domain, eval_type)
+    extracted = extract_domain_answer(
+        raw_output, domain, eval_type, prefer_first_boxed=(row.get("variant") == "stop")
+    )
     if extracted is None:
         extracted = row.get("extracted_answer")
+
+    from first_commit import judge_visible_output
 
     prompt = build_judge_user_prompt(
         question=question,
         gold_answer=gold,
-        answer_content=raw_output,
+        answer_content=judge_visible_output(row),
         extracted_answer=extracted,
         domain=domain,
         eval_type=eval_type,
@@ -211,11 +215,20 @@ def main() -> None:
     requests = []
     idx_map: dict[str, int] = {}
     extracted_map: dict[str, object] = {}
+    from first_commit import apply_empty_output
+
     for idx, (row_pos, row) in enumerate(targets):
+        if apply_empty_output(row):
+            continue
         req = build_request(idx, row, tasks.get(row.get("task_id")), judge_cfg)
         idx_map[req["custom_id"]] = row_pos
         extracted_map[req["custom_id"]] = req.pop("_extracted")
         requests.append(req)
+
+    if not requests:
+        write_jsonl(out_path, rows)
+        print("Nothing to send; empty outputs were marked incorrect.")
+        return
 
     if args.dry_run:
         sample = requests[0]
@@ -261,7 +274,8 @@ def main() -> None:
             continue
         result_type = entry.result.type
         if result_type == "succeeded":
-            text = entry.result.message.content[0].text
+            content = entry.result.message.content or []
+            text = content[0].text if content else ""
             ok = apply_verdict(rows[row_pos], text, extracted_map.get(cid))
             graded += int(ok)
             failed += int(not ok)

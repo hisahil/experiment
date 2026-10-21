@@ -49,12 +49,12 @@ class ClassifyRecoveryPairTests(unittest.TestCase):
             "PERSISTED",
         )
 
-    def test_persisted_when_both_none(self):
+    def test_no_answer_when_both_missing(self):
         self.assertEqual(
             classify_recovery_pair(
                 rec_correct=False, stop_correct=False, rec_extracted=None, stop_extracted=None
             ),
-            "PERSISTED",
+            "NO_ANSWER",
         )
 
     def test_migrated_when_rec_wrong_but_different_answer(self):

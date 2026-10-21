@@ -12,8 +12,8 @@ from typing import Any
 
 # Default full-factorial axes (thesis Exp 1 target design).
 VARIANTS: list[str] = ["baseline", "stop", "recovery"]
-ERROR_TYPES: list[str] = ["incorrect_reasoning", "paraphrased_shift", "off_topic"]
-K_INJECTIONS: list[int] = [1, 3, 5]
+ERROR_TYPES: list[str] = ["off_topic", "paraphrased_shift", "false_consensus"]
+K_INJECTIONS: list[int] = [1, 2, 3]
 LENGTH_LEVELS: list[str] = ["short", "long"]
 DEFAULT_SEEDS: list[int] = [42, 43, 44, 45, 46]
 
@@ -28,6 +28,17 @@ DEFAULT_DESIGN: dict[str, list[Any]] = {
 # script3.dialogue_mode values.
 DIALOGUE_MODE_ADAPTIVE = "adaptive_alternating"
 DIALOGUE_MODE_THREE_TURN = "three_turn"
+
+# script3.dialogue_generation_mode values.
+#   restart      = legacy multi-turn dialogue; the model restarts its think block
+#                  after each injection (build_dialogue_messages + generate_chat).
+#   continuation = Recum-style open think block; the model continues its OWN trace
+#                  (build_continuation_prompt + raw completion). Deletion model:
+#                  baseline prefix to midpoint, suffix deleted, injection 1 at the
+#                  midpoint, injections 2..k after one model-generated paragraph each.
+GENERATION_MODE_RESTART = "restart"
+GENERATION_MODE_CONTINUATION = "continuation"
+GENERATION_MODES = [GENERATION_MODE_RESTART, GENERATION_MODE_CONTINUATION]
 
 
 def expected_pregenerated_steps(

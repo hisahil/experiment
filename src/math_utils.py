@@ -18,6 +18,26 @@ import re
 BOXED_ANSWER_RE = re.compile(r"\\boxed\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}")
 
 
+def read_brace_balanced(text: str, open_brace_index: int) -> tuple[str | None, int | None]:
+    """Read the brace group whose opening ``{`` is at *open_brace_index*.
+
+    Returns ``(inner, end_exclusive)``. ``inner`` is None when the group is
+    never closed, which is a truncated commit rather than a nested-LaTeX miss.
+    """
+    if open_brace_index < 0 or open_brace_index >= len(text) or text[open_brace_index] != "{":
+        return None, None
+    depth = 0
+    for index in range(open_brace_index, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace_index + 1 : index], index + 1
+    return None, None
+
+
 def extract_boxed(text: str) -> str | None:
     """Return the inner content of the last \\boxed{...} in *text*, if any."""
     matches = BOXED_ANSWER_RE.findall(text)
@@ -25,6 +45,20 @@ def extract_boxed(text: str) -> str | None:
         return None
     # Last \boxed{} is the final answer; earlier ones are often intermediate steps.
     return matches[-1].strip()
+
+
+def extract_boxed_first(text: str) -> str | None:
+    """Return the inner content of the FIRST \\boxed{...} in *text*, if any.
+
+    Used when *text* is already restricted to the final-answer region (after an
+    explicit "Final Answer"/"Answer" marker): there the first boxed value is the
+    committed answer, while a trailing boxed is often a re-check sub-result
+    (pilot bug: "\\boxed{10} ... \\boxed{2}" graded 2 instead of 10).
+    """
+    matches = BOXED_ANSWER_RE.findall(text)
+    if not matches:
+        return None
+    return matches[0].strip()
 
 
 def parse_math500_gold(answer: str, solution: str | None = None) -> str:

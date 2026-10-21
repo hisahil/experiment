@@ -1,0 +1,20 @@
+Solve the task carefully.
+
+Task:
+{task}
+
+You MUST show your reasoning as numbered steps using this exact format (one step per line):
+Step 1: <reasoning>
+Step 2: <reasoning>
+Step 3: <reasoning>
+(continue with Step 4, Step 5, ... as needed — use at least 3 steps before the final answer)
+
+Do not skip step numbers. Do not use bullet points or unnumbered paragraphs for the main reasoning.
+
+For math problems, end with exactly one line in this format:
+Final answer: \boxed{...}
+
+For non-math tasks, end with exactly one line:
+Final answer: <your answer>
+
+Do not repeat these instructions. Do not echo placeholder text.

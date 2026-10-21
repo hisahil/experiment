@@ -13,13 +13,24 @@ if [[ ! -f "$PATCH" ]]; then
   tar czf "$PATCH" -C "$ROOT" \
     src/answer_judge.py src/adaptive_dialogue.py src/evaluator.py \
     src/grid_validation.py src/run_timings.py \
-    scripts/run_adaptive_dialogue.py scripts/evaluate.py \
+    src/baseline_index.py src/experiment_scope.py src/model_family.py \
+    src/cot_segmentation.py src/derived_metrics.py src/math_utils.py \
+    src/experiment_design.py src/llm_backend.py \
+    scripts/run_adaptive_dialogue.py scripts/evaluate.py scripts/run_perturbed.py \
+    scripts/convert_baselines_to_continuation.py \
     scripts/rejudge_fallbacks.py scripts/merge_runs.py \
     scripts/audit_transcripts.py scripts/sync_pod_live.sh scripts/validate_grid.py \
-    scripts/smoke_judge.py scripts/run_pipeline.py \
+    scripts/smoke_judge.py scripts/run_pipeline.py scripts/smoke_cross_model.py \
     scripts/prepare_tasks.py scripts/generate_baselines.py \
     scripts/build_intersection_tasks.py scripts/build_contingent.py \
-    scripts/run_task_selection_phase3_4.sh \
+    scripts/run_task_selection_phase3_4.sh scripts/setup_gpu.sh \
+    scripts/backfill_injection_fields.py scripts/smoke_intermediate_segments.py \
+    scripts/stop_mac_sidecars.sh scripts/start_mac_sidecars.sh \
+    scripts/generate_injections.py scripts/judge_batch.py \
+    configs/injection_generation.yaml configs/off_topic_themes.yaml \
+    configs/model_families.yaml prompts/baseline_generation_gemma.txt \
+    scripts/run_mini_run_overnight.sh scripts/hourly_pod_snapshot.sh \
+    scripts/deploy_mini_run_to_pod.sh scripts/run_cross_smokes_only.sh \
     configs/experiment.yaml configs/datasets.yaml
 fi
 

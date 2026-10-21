@@ -192,6 +192,8 @@ def build_output_record(
     task = state.task
     domain = task.get("domain", "math")
     eval_type = task.get("eval_type")
+    from first_commit import apply_empty_output, extract_stop_commitment
+
     extracted = extract_domain_answer(
         raw_output, domain, eval_type, prefer_first_boxed=(variant == "stop")
     )
@@ -233,7 +235,9 @@ def build_output_record(
         "n_rounds": state.k,
         "condition": state.condition,
         "turn2_source": state.turn2_source,
-        "dialogue_mode": "adaptive_alternating",
+        "dialogue_mode": (
+            "continuation" if state.generation_mode == "continuation" else "adaptive_alternating"
+        ),
         "generation_mode": state.generation_mode,
         # Per-row token caps so Script 4 classifies truncation per row (old rows
         # default to 100/8192). Lets the 100-cap and 500-cap runs be reported
@@ -241,6 +245,18 @@ def build_output_record(
         "stop_max_new_tokens": int(stop_max_tokens),
         "recovery_max_tokens": int(recovery_max_tokens),
     }
+    if variant == "stop":
+        commitment = extract_stop_commitment(
+            raw_output,
+            domain=domain,
+            eval_type=eval_type,
+            model_name=state.model_name,
+        )
+        record["first_commit_answer"] = commitment["answer"]
+        record["first_commit_span"] = commitment["span"]
+        record["first_commit_incomplete"] = commitment["incomplete"]
+    if apply_empty_output(record):
+        record["det_correct"] = False
     if variant == "recovery":
         record["recovery_terminated_by"] = classify_recovery_termination(
             finish_reason=finish_reason,
@@ -736,7 +752,16 @@ def main() -> None:
 
     baseline_records = load_jsonl(baseline_path)
     baseline_index = index_verified_baselines(baseline_records, model_name)
-    injection_index = index_injections(load_jsonl(injections_path), target_model=model_name)
+    _inj_records = load_jsonl(injections_path)
+    injection_index = index_injections(_inj_records, target_model=model_name)
+    if not injection_index and _inj_records:
+        print(
+            f"[injections] No rows tagged target_model={model_name!r}; "
+            f"indexing all {len(_inj_records)} rows (cross-model reuse).",
+            file=sys.stderr,
+        )
+        injection_index = index_injections(_inj_records, target_model=None)
+
 
     all_tasks = load_tasks(tasks_path, args.domain)
     task_by_id = {t["task_id"]: t for t in all_tasks}

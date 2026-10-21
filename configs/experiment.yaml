@@ -27,7 +27,7 @@ model:
   # Set to 7B for the fast 7B full run (full_math). Switch to the 14B/32B
   # checkpoint (and script3.baseline_file below) to run those models on the
   # SAME tasks/injections later — model name is the only per-model change.
-  name: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+  name: zai-org/GLM-Z1-9B-0414
   backend: vllm
   dtype: auto
   max_new_tokens: 12288
@@ -57,16 +57,48 @@ baseline:
 script3:
   # Per-model baselines (100 curated tasks each). Switch to baselines/14b or
   # baselines/32b together with model.name above for those model runs.
-  baseline_file: data/baselines/7b/baseline_cots.jsonl
-  injections_file: data/injections_generated.jsonl
+  baseline_file: data/baselines/glm-z1-9b/baseline_cots.jsonl
+  injections_file: data/injections_generated_glm-z1-9b.jsonl
   # Experiment-model runs after Claude injection (stop/recovery outputs only, not the dialog).
   # Inputs to build that dialog: baseline_file + injections_file. Schema: run_perturbed.py docstring.
-  output_file: data/post_injection_runs.jsonl
+  output_file: data/glm-z1-9b/post_injection_runs.jsonl
   adaptive_dialogues_file: data/adaptive_dialogues.jsonl
-  complete_dialogues_file: data/complete_dialogues.jsonl
+  complete_dialogues_file: data/glm-z1-9b/complete_dialogues.jsonl
+  # adaptive_dialogues.jsonl is a redundant subset of complete_dialogues.jsonl in
+  # continuation mode (no Stop/Recovery). Off by default; re-enable only for the
+  # legacy restart path.
+  write_adaptive_dialogues: false
+  # Phase-1 instrumentation (continuation runs):
+  #  prompt_audit_sample: persist the FULL rendered prompt for the first N dialogues
+  #    under prompt_audit_dir (continuation-mode proof). Every row still carries
+  #    prompt_sha256 + reasoning_trace_tokens. Override per run: --prompt-audit-sample.
+  prompt_audit_sample: 50
+  prompt_audit_dir: data/glm-z1-9b/prompt_audit
+  #  capture_logprobs: top-k log-probs per generated token (vLLM only). Enables
+  #    mean_logprob (perplexity proxy) + answer_top_logprobs (boxed-answer
+  #    distribution at stop, decoy-vs-gold for false_consensus). null/0 disables.
+  capture_logprobs: 5
   # three_turn = legacy bundled injection (run_perturbed.py)
   # adaptive_alternating = multi-turn with real intermediate generations (run_adaptive_dialogue.py)
   dialogue_mode: adaptive_alternating
+  # dialogue_generation_mode (run_adaptive_dialogue.py):
+  #   restart      = legacy multi-turn; model restarts its think block each injection.
+  #   continuation = Recum-style open think block; the model continues its OWN trace.
+  #                  Deletion model: baseline prefix to midpoint (rest deleted),
+  #                  injection 1 at midpoint, injections 2..k after one model paragraph
+  #                  each (cut at \n\n), then stop + recovery from the same trace.
+  # CLI override: --generation-mode {restart|continuation}.
+  dialogue_generation_mode: continuation
+  continuation:
+    # In continuation mode the per-model baseline is the \n\n-joined trace produced
+    # by scripts/convert_baselines_to_continuation.py (Step N: prefixes stripped).
+    # Switch this to baselines/14b or baselines/32b together with model.name above.
+    baseline_file: data/baselines/glm-z1-9b/baseline_cots_continuation.jsonl
+    trace_separator: "\n\n"        # natural DeepSeek paragraph/step separator
+    intermediate_stop: "\n\n"      # cut each intermediate model turn after one paragraph
+    # Safety net only: the primary cut is the \n\n stop above. 5000 caps a run that
+    # never emits a paragraph break (mini-run validates this is rare).
+    intermediate_max_tokens: 5000
   injection_tag: none
   turn2_source: baseline_prefix
   adaptive_from_injection: 2
@@ -108,20 +140,23 @@ script3:
 # Shared file paths (Scripts 1–3 read tasks/injections; scopes may override tasks).
 paths:
   tasks: data/experiment_tasks.jsonl
-  injections: data/injections_generated.jsonl
+  injections: data/injections_generated_glm-z1-9b.jsonl
 
 # Injection generation (Script 2)
 injection:
   provider: anthropic
   model: claude-sonnet-4-6   # Claude Sonnet 4.6; NOT one of the 3 experiment models
   placement: midpoint               # inject at floor(n/2) of baseline CoT
-  generated_file: data/injections_generated.jsonl
+  generated_file: data/injections_generated_glm-z1-9b.jsonl
   # How many injection steps Script 2 pre-generates per cell.
-  # Adaptive dialogues (script3.dialogue_mode: adaptive_alternating) consume only
-  # injection_steps[0]; rounds 2..k are generated live in Script 3b, so a single
-  # pre-generated step is enough (auto -> 1). Legacy three_turn injects all k steps
-  # bundled in Turn 3 (auto -> k). Override with 1 or k for tests.
-  pregenerate_steps: auto   # auto | 1 | k
+  # Continuation mode (script3.dialogue_generation_mode: continuation) consumes ALL
+  # k pre-generated steps inline (one-shot: Script 2 returns injection_steps[] with k
+  # entries per cell, no live Claude in Script 3b) -> set k.
+  # Legacy adaptive_alternating consumes only injection_steps[0] (auto -> 1); legacy
+  # three_turn injects all k bundled (auto -> k). Override with 1 or k for tests.
+  pregenerate_steps: k   # auto | 1 | k
+  # Theme pool for the off_topic error type (English, zero overlap with von Recum).
+  off_topic_themes_file: configs/off_topic_themes.yaml
 
 # LLM-as-a-Judge grading (Scripts 1, 3, 4 — primary verifier)
 judge:
@@ -135,18 +170,20 @@ judge:
   raw_log_enabled: true
 
 # Full factorial design (what the thesis measures)
-# Exactly three error types are used. incorrect_reasoning also covers
-# hallucinated intermediate claims; do not add a separate hallucinated_fact type.
+# Exactly three error types are used, all position-robust and self-contained
+# (continuation mode): off_topic (thematic distraction, no decoy), paraphrased_shift
+# (premise reframing / dropping an existing constraint, no calculation), and
+# false_consensus (authority + task-anchored pseudo-justification, names decoy).
 design:
   variants:
     - baseline
     - stop
     - recovery
   error_types:
-    - incorrect_reasoning
-    - paraphrased_shift
     - off_topic
-  k_injections: [1, 3, 5]
+    - paraphrased_shift
+    - false_consensus
+  k_injections: [1, 2, 3]
   length_levels: [short, long]
   seeds: [42, 43, 44, 45, 46]
 
@@ -160,7 +197,7 @@ supplementary_positions:
   config: configs/supplementary_positions.yaml
 
 # Active slice — change only this block (or use --scope CLI)
-active_scope: pilot
+active_scope: full_math
 
 scopes:
   pilot:
@@ -169,7 +206,7 @@ scopes:
     max_per_domain: null
     domains: [math, science, logic]
     variants: [baseline, stop, recovery]
-    error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
     k_injections: [1]
     length_levels: [short]
     seeds: [42]
@@ -179,7 +216,7 @@ scopes:
     max_per_domain: 80
     domains: [math, science, logic]
     variants: [baseline, stop, recovery]
-    error_types: [off_topic, incorrect_reasoning, paraphrased_shift]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
     k_injections: [1, 3, 5]
     length_levels: [short, long]
     seeds: [42, 43, 44, 45, 46]
@@ -191,17 +228,44 @@ scopes:
   #   python scripts/build_intersection_tasks.py --pool data/experiment_tasks_stratified.jsonl \
   #     --baselines data/baseline_cots.jsonl --out data/experiment_tasks.jsonl
   # Dialogues per model: 100 x 3 error_types x 3 k x 2 length x 3 seeds = 5,400.
-  # Switch model.name to 7B / 14B / 32B between runs.
+  # Switch model.name AND script3.continuation.baseline_file to 7B / 14B / 32B between runs.
   full_math:
-    description: "Math-only full run: 100 intersection tasks (20/level), k{1,3,5}, short+long, 3 seeds, adversarial"
+    description: "Math-only continuation full run: 100 intersection tasks, k{1,2,3}, short+long, 3 seeds, adversarial"
     tasks: data/experiment_tasks.jsonl
     max_tasks_total: null
     max_per_domain:
       math: 100
     domains: [math]
     variants: [stop, recovery]
-    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
-    k_injections: [1, 3, 5]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
+    k_injections: [1, 2, 3]
+    length_levels: [short, long]
+    seeds: [42, 43, 44]
+  # Phase 1 end-to-end mini-run (continuation mode, Go/No-Go before the full run):
+  #   python scripts/run_adaptive_dialogue.py --scope mini_run --generation-mode continuation
+  # 10 math tasks x 3 error_types x k{1,2,3} x {short,long} x 1 seed = 180 dialogues.
+  mini_run:
+    description: "Continuation mini-run: 10 math tasks, k{1,2,3}, short+long, 1 seed, stop+recovery"
+    tasks: data/experiment_tasks.jsonl
+    max_tasks_total: 10
+    max_per_domain:
+      math: 10
+    domains: [math]
+    variants: [stop, recovery]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
+    k_injections: [1, 2, 3]
+    length_levels: [short, long]
+    seeds: [42]
+  mini_run_3seed:
+    description: "Continuation mini-run: 10 math tasks, k{1,2,3}, short+long, 3 seeds (matches full_math), stop+recovery"
+    tasks: data/experiment_tasks.jsonl
+    max_tasks_total: 10
+    max_per_domain:
+      math: 10
+    domains: [math]
+    variants: [stop, recovery]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
+    k_injections: [1, 2, 3]
     length_levels: [short, long]
     seeds: [42, 43, 44]
   # GPU pilot — reduced design on the MATH-500 + SciBench + logic (K&K + JustLogic) pool.
@@ -223,7 +287,7 @@ scopes:
       logic: 12         # 50/50 K&K + JustLogic (6 each); divisible by 2 and 6 for tier balance
     domains: [math, science, logic]
     variants: [stop, recovery]                   # recovery is required for REI
-    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
     k_injections: [1, 3]
     length_levels: [short]
     seeds: [42]
@@ -244,7 +308,7 @@ scopes:
       logic: 12
     domains: [math, science, logic]
     variants: [stop, recovery]
-    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
     k_injections: [1, 3]
     length_levels: [short]
     seeds: [42]
@@ -257,7 +321,7 @@ scopes:
     max_tasks_total: null
     domains: [math, science, logic]
     variants: [stop, recovery]
-    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
     k_injections: [1, 3, 5]
     length_levels: [short, long]
     seeds: [42, 43, 44, 45, 46]
@@ -271,16 +335,16 @@ scopes:
       logic: 12
     domains: [math, science, logic]
     variants: [stop, recovery]
-    error_types: [incorrect_reasoning, paraphrased_shift, off_topic]
+    error_types: [off_topic, paraphrased_shift, false_consensus]
     k_injections: [5]
     length_levels: [long]
     seeds: [42]
 
 # Evaluation + REI analysis (Script 4 — python scripts/evaluate.py)
 script4:
-  input_path: data/post_injection_runs.jsonl    # Script 3 output (variant: stop|recovery)
-  baseline_path: data/baseline_cots.jsonl      # Script 1 output (clean accuracy source)
-  output_dir: results
+  input_path: data/glm-z1-9b/post_injection_runs.jsonl    # Script 3 output (variant: stop|recovery)
+  baseline_path: data/baselines/glm-z1-9b/baseline_cots.jsonl      # Script 1 output (clean accuracy source)
+  output_dir: results/glm-z1-9b
   # ci_z — 95% CI half-width per condition: ci_z * (std / sqrt(n_tasks)). Reporting only.
   ci_z: 1.96
   # min_recovery_seeds — per task-condition, count recovery runs with
@@ -305,9 +369,9 @@ script4:
   # (mixed-domain pilot corruption_rate ~0.56, just above 0.5). Expect a floor
   # effect for recovery_gain there; do not read low recovery as "recovery fails".
   sanity_thresholds:
-    incorrect_reasoning: 0.70
     off_topic: 0.60
     paraphrased_shift: 0.50
+    false_consensus: 0.70
   math_tolerance: 1.0e-4                         # numeric tolerance for math answers
   science_tolerance: 1.0e-2                    # numeric tolerance for science (deterministic cross-check)
   # ── Lean-metrics migration (Phase A/B) ────────────────────────────────
@@ -318,7 +382,16 @@ script4:
   # Judge-coverage HARD gate (A5): aborts evaluate when judge_fallback rows remain
   # or the per-k fallback rate is unbalanced (pilot k=3 det-only confound).
   # Full run requires 100% judge coverage; pilot/backup re-evals leave this false.
-  require_judge_coverage: false   # set true for full_math (after ensure_judge_coverage loop)
+  #
+  # Full-run workflow (Punkt 2 in pre_full_run_fixes plan):
+  #   1. Script 3b writes rows with judge_fallback=true (L0 design).
+  #   2. scripts/judge_batch.py --only-fallbacks against post_injection_runs.jsonl
+  #      → sets real Anthropic judgments and clears judge_fallback.
+  #   3. scripts/evaluate.py --require-judge-coverage → aborts if any fallbacks
+  #      or the per-k imbalance still exceed the thresholds below.
+  # Keep the yaml default at false so pilot/backfill re-evals stay soft; opt in
+  # via CLI or a scope-specific override when running the full experiment.
+  require_judge_coverage: false   # set true (or pass --require-judge-coverage) for full_math
   judge_coverage_max_fallback_rate: 0.0
   judge_coverage_max_k_imbalance_pp: 5.0
   # math-only expected ranges (C3) — reference so warnings are not calibrated on
@@ -326,7 +399,7 @@ script4:
   math_kappa_reference: 0.83            # math-only judge/det kappa (mixed pilot ~0.91)
   # Expected judge/det disagreement baseline (math-only) ~6-8%; warn fires >15%.
   # Expected stop corruption_rate (math, 2A prefill) per error_type:
-  #   incorrect_reasoning ~0.85-0.90, off_topic ~0.90, paraphrased_shift ~0.55-0.65.
+  #   false_consensus ~0.85-0.90, off_topic ~0.90, paraphrased_shift ~0.55-0.65.
   #   (Pilot values are mixed-domain; re-check on the math full run.)
 
 logging:

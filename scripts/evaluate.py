@@ -35,7 +35,7 @@ Usage:
 
 Two-level grouping (see CONDITION_KEYS below):
   - A "condition" / design cell = one tuple of (model, domain, error_type, k, length_level).
-    Example: DeepSeek · math · incorrect_reasoning · k=1 · short.
+    Example: DeepSeek · math · false_consensus · k=1 · short.
   - results_per_task.csv: one row per TASK inside that cell (algebra_2391 in the cell above).
   - results_per_condition.csv: mean + CI over all tasks sharing the same CONDITION_KEYS
     (13 math tasks in that cell → 13 per-task rows collapse to 1 condition row).
@@ -93,12 +93,13 @@ from evaluator import (  # noqa: E402
 from math_utils import extract_boxed  # noqa: E402
 # Shared verified-baseline selection (identical to Script 3's injection set).
 from baseline_index import clean_accuracy_map  # noqa: E402
+import derived_metrics  # noqa: E402  (Phase-2 secondary metrics)
 
 DEFAULT_EXPERIMENT_CONFIG = ROOT / "configs/experiment.yaml"
 
 # One factorial design cell, without task_id. Script 4 groups post_injection_runs rows
 # by these five fields, then adds task_id for the per-task table.
-# Example cell: (DeepSeek, math, incorrect_reasoning, 1, short) holds many tasks;
+# Example cell: (DeepSeek, math, false_consensus, 1, short) holds many tasks;
 # aggregate_condition() averages REI/accuracy across those tasks into one condition row.
 CONDITION_KEYS = ("model", "domain", "error_type", "k", "length_level")
 
@@ -107,6 +108,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "input_path": "data/post_injection_runs.jsonl",
     "baseline_path": "data/baseline_cots.jsonl",
     "output_dir": "results",
+    # Phase-2 derived (secondary) metrics: complete_dialogues (trace_segments) +
+    # experiment_tasks (decoy/gold join). derived_metrics gates on continuation rows.
+    "complete_dialogues_path": "data/complete_dialogues.jsonl",
+    "tasks_path": "data/experiment_tasks.jsonl",
+    "derived_metrics": True,
     "ci_z": 1.96,  # 95% CI half-width: ci_z * SEM per condition row
     # Descriptive threshold only (no filtering): count tasks in a condition where
     # n_recovery_natural_seeds >= this. Full run uses 3 seeds (max 3 natural recoveries
@@ -119,10 +125,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "min_valid_tasks": 60,
     "difficulty_bins": {"easy": 0.70, "hard": 0.40},
     "sanity_thresholds": {
-        "incorrect_reasoning": 0.70,
         "off_topic": 0.60,
         "paraphrased_shift": 0.50,
+        "false_consensus": 0.70,
     },
+    # Continuation vs restart must not be pooled. None = no filter (warn if mixed);
+    # set to "continuation" / "restart" (CLI --generation-mode or script4) to select.
+    "generation_mode": None,
     "math_tolerance": 1e-4,
     "science_tolerance": 1e-2,
     # Recovery cap from Script 3; used to reclassify token_limit after parser fixes.
@@ -267,7 +276,10 @@ def _run_correct(run: dict, config: dict) -> bool | None:
         raw = run.get("raw_output")
         if raw is not None:
             extracted = extract_domain_answer(
-                str(raw), run.get("domain", "math"), run.get("eval_type")
+                str(raw),
+                run.get("domain", "math"),
+                run.get("eval_type"),
+                prefer_first_boxed=(run.get("variant") == "stop"),
             )
     if extracted is None or _gold_missing(run.get("gold_answer")):
         return None
@@ -303,7 +315,9 @@ def _apply_math_sanity_gate(run: dict) -> bool:
     raw = run.get("raw_output")
     if raw is None:
         return False
-    re_ext = extract_domain_answer(str(raw), "math", run.get("eval_type"))
+    re_ext = extract_domain_answer(
+        str(raw), "math", run.get("eval_type"), prefer_first_boxed=(run.get("variant") == "stop")
+    )
     if gross_numeric_mismatch(re_ext, run.get("gold_answer")):
         run["correct"] = False
         run["verifier_score"] = 0
@@ -335,7 +349,12 @@ def _stop_answer_is_complete(run: dict) -> bool:
     if raw is None or not str(raw).strip():
         return False
     domain = run.get("domain", "math")
-    extracted = extract_domain_answer(str(raw), domain, run.get("eval_type"))
+    extracted = extract_domain_answer(
+        str(raw),
+        domain,
+        run.get("eval_type"),
+        prefer_first_boxed=(run.get("variant") == "stop"),
+    )
     if extracted is None:
         return False
     if domain == "math" and "\\boxed{" in str(raw) and extract_boxed(str(raw)) is None:
@@ -392,8 +411,17 @@ def score_runs(runs: list[dict], config: dict) -> list[dict]:
     run_sanity_checks() (corruption on stop rows), analyze_overthinking(),
     analyze_ungradable() (reason breakdown).
     """
+    from first_commit import apply_empty_output
+
     tol = float(config["math_tolerance"])
     for run in runs:
+        if apply_empty_output(run):
+            run["_correct"] = 0.0
+            run["_ungradable_reason"] = None
+            run["_stop_truncated_no_answer"] = False
+            if run.get("variant") == "recovery":
+                run["_recovery_terminated_by"] = "empty_output"
+            continue
         # Per-row caps: rows written after the pilot store stop_max_new_tokens /
         # recovery_max_tokens; old rows lack the field and were generated with the
         # original 100 / 8192 caps, so default to those (NOT the current config cap,
@@ -453,9 +481,10 @@ def baseline_tokens_by_task_model(baselines: list[dict]) -> dict[tuple[str, str]
     (task_id, model) -> baseline CoT length proxy for length-inflation metrics.
 
     Uses verified baselines only (same set as Script 3 / clean_accuracy_map).
-    baseline_cots.jsonl has no tokens_generated field; we use word count on
-    baseline_cot (or joined steps) as a reproducible proxy comparable across
-    tasks. cot_length_inflation = (tokens_recovery - tokens_baseline) / tokens_baseline.
+    Counts tokens with the model tokenizer when that tokenizer is already
+    available locally. Otherwise uses a word count and records no network fetch.
+    Recovery rows already store tokenizer ``tokens_generated``, so RTER compares
+    those units with this baseline count.
     """
     out: dict[tuple[str, str], float] = {}
     for rec in baselines:
@@ -465,9 +494,29 @@ def baseline_tokens_by_task_model(baselines: list[dict]) -> dict[tuple[str, str]
         cot = rec.get("baseline_cot") or ""
         if not str(cot).strip() and rec.get("steps"):
             cot = "\n".join(str(s) for s in rec["steps"])
-        words = len(str(cot).split()) if str(cot).strip() else 0
-        out[key] = float(words)
+        out[key] = _baseline_token_count(str(rec.get("model") or ""), str(cot))
     return out
+
+
+_TOKENIZER_CACHE: dict[str, object] = {}
+
+
+def _baseline_token_count(model_name: str, text: str) -> float:
+    """Tokenizer count when cached locally; otherwise words, without downloading."""
+    if not text.strip():
+        return 0.0
+    if model_name:
+        try:
+            from transformers import AutoTokenizer
+
+            tokenizer = _TOKENIZER_CACHE.get(model_name)
+            if tokenizer is None:
+                tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+                _TOKENIZER_CACHE[model_name] = tokenizer
+            return float(len(tokenizer.encode(text, add_special_tokens=False)))
+        except Exception:
+            pass
+    return float(len(text.split()))
 
 
 def compute_cot_length_inflation(tokens_recovery: float, tokens_baseline: float) -> float | None:
@@ -721,11 +770,10 @@ def compute_rter(
 
     RTER = (acc_recovery / tokens_recovery) / (acc_clean / tokens_baseline).
 
-    Reads as "recovery accuracy-per-token relative to clean accuracy-per-token".
-    1.0 = recovery is as token-efficient as the clean baseline; < 1.0 = recovery
-    buys its accuracy at a higher token cost. Bounded and clean-normalized, unlike
-    REI (which is ~1e-4 and scale-dependent). Returns None when any input is
-    missing/NaN or a denominator (tokens or clean accuracy-per-token) is 0.
+    Reads as "final-branch recovery accuracy-per-token relative to the complete
+    clean baseline". With acc_clean=1 this is acc_recovery * baseline_tokens /
+    final_recovery_tokens. Values above 1 are valid. Intermediate turns are not
+    included. Returns None when any input is missing/NaN or a denominator is 0.
     """
     for v in (acc_recovery, acc_clean, tokens_recovery, tokens_baseline):
         if v is None or (isinstance(v, float) and math.isnan(v)):
@@ -1117,11 +1165,13 @@ def aggregate_condition(per_task_rows: list[dict], config: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+def _answer_missing(value: object) -> bool:
+    return value is None or not str(value).strip()
+
+
 def _same_answer(a: object, b: object) -> bool:
-    """True when two extracted answers are the same final answer (incl. both None)."""
-    if a is None and b is None:
-        return True
-    if a is None or b is None:
+    """True when two extracted answers are the same nonempty final answer."""
+    if _answer_missing(a) or _answer_missing(b):
         return False
     return str(a).strip() == str(b).strip()
 
@@ -1137,12 +1187,20 @@ def classify_recovery_pair(
     Stop-anchored class for one (recovery, stop) seed pair.
 
     RECOVERED — recovery correct while stop was wrong (genuine self-correction).
-    PERSISTED — recovery still wrong AND identical to the stop answer (no change).
-    MIGRATED  — anything else (e.g. never-damaged, or recovery moved to a different
-                wrong answer).
+    PERSISTED — recovery still wrong AND the same nonempty answer as the stop.
+    NO_ANSWER — a wrong pair whose stop or recovery answer is missing. This is
+                not evidence of the same false answer.
+    MIGRATED  — anything else (e.g. never-damaged, or a different wrong answer).
+
+    String equality is the provisional comparator. A later SAME/DIFFERENT judge
+    verdict can replace it for nonempty wrong-to-wrong pairs; traces stay hidden.
     """
     if rec_correct and not stop_correct:
         return "RECOVERED"
+    if (not rec_correct) and (
+        _answer_missing(rec_extracted) or _answer_missing(stop_extracted)
+    ):
+        return "NO_ANSWER"
     if (not rec_correct) and _same_answer(rec_extracted, stop_extracted):
         return "PERSISTED"
     return "MIGRATED"
@@ -1194,6 +1252,7 @@ def decompose_recovery_stop(runs: list[dict], *, exclude_token_limit: bool = Fal
             "RECOVERED": 0,
             "PERSISTED": 0,
             "MIGRATED": 0,
+            "NO_ANSWER": 0,
             "n_stop_wrong": 0,
             "n_stop_correct": 0,
             "n_overcorrected": 0,
@@ -1241,6 +1300,7 @@ def decompose_recovery_stop(runs: list[dict], *, exclude_token_limit: bool = Fal
                 "n_recovered": c["RECOVERED"],
                 "n_persisted": c["PERSISTED"],
                 "n_migrated": c["MIGRATED"],
+                "n_no_answer": c["NO_ANSWER"],
                 "n_stop_wrong": n_stop_wrong,
                 "n_stop_correct": n_stop_correct,
                 "n_overcorrected": c["n_overcorrected"],
@@ -1520,7 +1580,7 @@ def build_pair_coverage(runs: list[dict]) -> list[dict]:
     for r in runs:
         if r.get("variant") not in ("stop", "recovery"):
             continue
-        cell = (r.get("model"), r.get("error_type"), r.get("k"))
+        cell = (r.get("model"), r.get("error_type"), r.get("k"), r.get("length_level"))
         key = (cell, r.get("task_id"), r.get("seed"))
         groups[key[0]].setdefault((r.get("task_id"), r.get("seed")), {})[r["variant"]] = r
 
@@ -1535,12 +1595,13 @@ def build_pair_coverage(runs: list[dict]) -> list[dict]:
             n_design += 1
             if stop.get("_correct") is not None and rec.get("_correct") is not None:
                 n_gradable += 1
-        model, error_type, k = cell
+        model, error_type, k, length_level = cell
         rows.append(
             {
                 "model": model,
                 "error_type": error_type,
                 "k": k,
+                "length_level": length_level,
                 "n_pairs_design": n_design,
                 "n_pairs_gradable": n_gradable,
                 "coverage_fraction": _round(n_gradable / n_design, 4) if n_design else None,
@@ -2174,31 +2235,41 @@ def _task_collapsed_recovery_gain(rows: list[dict]) -> dict[Any, float]:
 
 
 def _confirmatory_row(scope: str, rows: list[dict], *, n_pairs: int) -> dict:
-    """Two-stage H1 test for one scope: McNemar + Wilson over task-level gains."""
+    """H1 for one scope: task-mean Recovery Gain, cluster bootstrap, and sign test."""
     per_task = _task_collapsed_recovery_gain(rows)
     gains = list(per_task.values())
     n_clusters = len(gains)
     mean_gain = float(np.mean(gains)) if gains else float("nan")
-    # Task-level discordance (sign test = McNemar on per-task gain signs).
-    b_tasks = sum(1 for g in gains if g > 0)   # tasks recovery helped
-    c_tasks = sum(1 for g in gains if g < 0)   # tasks recovery hurt
+    b_tasks = sum(1 for g in gains if g > 0)
+    c_tasks = sum(1 for g in gains if g < 0)
     n_decisive = b_tasks + c_tasks
     p_value = mcnemar_exact_p(b_tasks, c_tasks)
     win_lo, win_hi = wilson_ci(b_tasks, n_decisive)
+    boot_lo, boot_hi = bootstrap_ci(gains)
     return {
         "scope": scope,
         "comparison": "recovery_gain_vs_zero",
         "n_pairs_gradable": n_pairs,
         "n_clusters": n_clusters,
         "mean_recovery_gain": _round(mean_gain, 4),
+        "recovery_gain_bootstrap_lo": _round(boot_lo, 4),
+        "recovery_gain_bootstrap_hi": _round(boot_hi, 4),
         "n_tasks_improved": b_tasks,
         "n_tasks_worsened": c_tasks,
+        "n_tasks_tied": n_clusters - n_decisive,
         "win_rate": _round(b_tasks / n_decisive, 4) if n_decisive else None,
         "win_rate_wilson_lo": _round(win_lo, 4),
         "win_rate_wilson_hi": _round(win_hi, 4),
+        "sign_test_p": _round(p_value, 8),
+        "sign_test_p_display": _format_p(p_value),
         "mcnemar_p": _round(p_value, 8),
         "mcnemar_p_display": _format_p(p_value),
-        "note": "insufficient clusters (n<2)" if n_clusters < 2 else "",
+        "note": (
+            "primary=task-mean recovery gain with cluster bootstrap; "
+            "robustness=exact task-level sign test"
+            if n_clusters >= 2
+            else "insufficient clusters (n<2)"
+        ),
     }
 
 
@@ -2222,6 +2293,32 @@ def _count_gradable_pairs(runs: list[dict], scope_filter) -> int:
                 continue
             n += 1
     return n
+
+
+def _task_k_slopes(rows: list[dict]) -> list[float]:
+    """One linear recovery-gain slope per task over the available k values."""
+    by_task: dict[Any, dict[float, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        gain = row.get("recovery_gain")
+        if gain is None or (isinstance(gain, float) and math.isnan(gain)):
+            continue
+        try:
+            k_value = float(row.get("k"))
+        except (TypeError, ValueError):
+            continue
+        by_task[row.get("task_id")][k_value].append(float(gain))
+    slopes: list[float] = []
+    for by_k in by_task.values():
+        points = sorted((k, float(np.mean(vals))) for k, vals in by_k.items() if vals)
+        if len(points) < 2:
+            continue
+        ks = [point[0] for point in points]
+        gains = [point[1] for point in points]
+        if len(set(ks)) < 2:
+            continue
+        slope = float(np.polyfit(ks, gains, 1)[0])
+        slopes.append(slope)
+    return slopes
 
 
 def run_confirmatory_tests(per_task_rows: list[dict], runs: list[dict]) -> list[dict]:
@@ -2273,33 +2370,27 @@ def run_confirmatory_tests(per_task_rows: list[dict], runs: list[dict]) -> list[
             )
         )
 
-    # H3: k-trend on task-collapsed recovery_gain (one point per task per k).
-    pts_k: list[float] = []
-    pts_gain: list[float] = []
-    for k in sorted(by_k, key=lambda x: str(x)):
-        try:
-            k_num = float(k)
-        except (TypeError, ValueError):
-            continue
-        for gain in _task_collapsed_recovery_gain(by_k[k]).values():
-            pts_k.append(k_num)
-            pts_gain.append(gain)
-    if len({k for k in pts_k}) >= 2 and len(pts_gain) >= 3:
+    # H3: one slope per task across k, then test that set of task slopes.
+    slopes = _task_k_slopes(per_task_rows)
+    if len(slopes) >= 2:
+        slope_mean = float(np.mean(slopes))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            lr = scipy_stats.linregress(pts_k, pts_gain)
+            slope_p = float(scipy_stats.ttest_1samp(slopes, 0.0).pvalue)
+        boot_lo, boot_hi = bootstrap_ci(slopes)
         results.append(
             {
                 "scope": "k_trend",
-                "comparison": "recovery_gain_slope_over_k",
-                "n_pairs_gradable": len(pts_gain),
-                "n_clusters": len(pts_gain),
-                "mean_recovery_gain": _round(float(np.mean(pts_gain)), 4),
-                "k_trend_slope": _round(float(lr.slope), 6),
-                "k_trend_r": _round(float(lr.rvalue), 4),
-                "mcnemar_p": _round(float(lr.pvalue), 8),
-                "mcnemar_p_display": _format_p(float(lr.pvalue)),
-                "note": "H3: linear slope of task-collapsed recovery_gain over k",
+                "comparison": "task_recovery_gain_slopes_over_k",
+                "n_pairs_gradable": len(slopes),
+                "n_clusters": len(slopes),
+                "mean_recovery_gain": _round(slope_mean, 4),
+                "k_trend_slope": _round(slope_mean, 6),
+                "k_trend_bootstrap_lo": _round(boot_lo, 6),
+                "k_trend_bootstrap_hi": _round(boot_hi, 6),
+                "mcnemar_p": _round(slope_p, 8),
+                "mcnemar_p_display": _format_p(slope_p),
+                "note": "H3: mean of one recovery-gain slope per task over k",
             }
         )
 
@@ -2861,6 +2952,12 @@ def resolve_config(args: argparse.Namespace) -> dict:
         config["stop_max_new_tokens"] = int(script3["stop_max_new_tokens"])
     if script3.get("format_effect_threshold_pp") is not None:
         config["format_effect_threshold_pp"] = float(script3["format_effect_threshold_pp"])
+    # Derived-metric inputs: complete_dialogues from script3, tasks from paths.
+    if script3.get("complete_dialogues_file"):
+        config["complete_dialogues_path"] = script3["complete_dialogues_file"]
+    paths_cfg = cfg_file.get("paths", {}) if isinstance(cfg_file, dict) else {}
+    if paths_cfg.get("tasks"):
+        config["tasks_path"] = paths_cfg["tasks"]
 
     config["difficulty_bins"] = _normalize_difficulty_bins(config.get("difficulty_bins"))
     if not isinstance(config.get("sanity_thresholds"), dict):
@@ -2878,6 +2975,14 @@ def resolve_config(args: argparse.Namespace) -> dict:
         config["output_dir"] = str(args.output_dir)
     if getattr(args, "require_judge_coverage", False):
         config["require_judge_coverage"] = True
+    if getattr(args, "generation_mode", None) is not None:
+        config["generation_mode"] = args.generation_mode
+    if getattr(args, "complete_dialogues", None) is not None:
+        config["complete_dialogues_path"] = str(args.complete_dialogues)
+    if getattr(args, "tasks", None) is not None:
+        config["tasks_path"] = str(args.tasks)
+    if getattr(args, "no_derived_metrics", False):
+        config["derived_metrics"] = False
     return config
 
 
@@ -2984,6 +3089,32 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force the HARD judge-coverage gate (full run); overrides config.",
     )
+    parser.add_argument(
+        "--generation-mode",
+        choices=["restart", "continuation"],
+        default=None,
+        help=(
+            "Evaluate only rows with this generation_mode (legacy rows count as "
+            "restart). restart and continuation runs must not be pooled."
+        ),
+    )
+    parser.add_argument(
+        "--complete-dialogues",
+        type=Path,
+        default=None,
+        help="Override complete_dialogues_path (trace_segments for derived metrics).",
+    )
+    parser.add_argument(
+        "--tasks",
+        type=Path,
+        default=None,
+        help="Override tasks_path (experiment_tasks.jsonl; decoy/gold join).",
+    )
+    parser.add_argument(
+        "--no-derived-metrics",
+        action="store_true",
+        help="Skip Phase-2 derived (secondary) metrics CSVs.",
+    )
     return parser.parse_args()
 
 
@@ -3011,7 +3142,29 @@ def main() -> None:
     if not baselines:
         warnings.warn(f"[WARN] No baseline rows in {baseline_path}; clean accuracy will be NaN.", stacklevel=2)
 
-    print(f"[OK] Loaded {len(runs)} perturbed rows from {input_path}")
+    # Continuation vs restart must not be pooled into one set of numbers. Tag rows
+    # (legacy rows default to restart), then filter to the requested mode or warn.
+    for r in runs:
+        r.setdefault("generation_mode", "restart")
+    requested_mode = config.get("generation_mode")
+    modes_present = sorted({r.get("generation_mode", "restart") for r in runs})
+    if requested_mode:
+        runs = [r for r in runs if r.get("generation_mode", "restart") == requested_mode]
+        print(f"[INFO] generation_mode filter: {requested_mode} ({len(runs)} rows)")
+        if not runs:
+            sys.exit(
+                f"[FAIL] No rows with generation_mode={requested_mode} in {input_path} "
+                f"(present: {modes_present})"
+            )
+    elif len(modes_present) > 1:
+        warnings.warn(
+            f"[WARN] Mixed generation_mode present {modes_present}; restart and "
+            "continuation runs must NOT be pooled. Pass --generation-mode to select "
+            "one before citing numbers.",
+            stacklevel=2,
+        )
+
+    print(f"[OK] Loaded {len(runs)} perturbed rows from {input_path} (modes: {modes_present})")
     print(f"[OK] Loaded {len(baselines)} baseline rows from {baseline_path}")
     print(f"[INFO] difficulty_bins={config['difficulty_bins']} | output_dir={output_dir}")
 
@@ -3035,6 +3188,30 @@ def main() -> None:
     if judge_cov_msgs:
         for msg in judge_cov_msgs:
             print(f"[JUDGE-GATE] {msg}")
+
+    # Machine-readable coverage flag so the warning is visible in metadata even
+    # when the run is allowed to finish (default). flag: OK | WARN.
+    _overall_cov = next(
+        (r for r in judge_cov_rows if r.get("scope") == "overall"), {}
+    )
+    judge_cov_summary = {
+        "flag": "OK" if judge_cov_passed else "WARN",
+        "passed": judge_cov_passed,
+        "require_judge_coverage": bool(config.get("require_judge_coverage")),
+        "overall_fallback_rate": _overall_cov.get("fallback_rate"),
+        "n_judge_fallback": _overall_cov.get("n_judge_fallback"),
+        "n_runs": _overall_cov.get("n_runs"),
+        "messages": judge_cov_msgs,
+    }
+    judge_cov_summary_path = output_dir / "judge_coverage_summary.json"
+    judge_cov_summary_path.write_text(
+        json.dumps(judge_cov_summary, indent=2), encoding="utf-8"
+    )
+    print(
+        f"[OK] {judge_cov_summary_path}  (flag={judge_cov_summary['flag']}, "
+        f"fallback_rate={judge_cov_summary['overall_fallback_rate']})"
+    )
+
     if not judge_cov_passed:
         if config.get("require_judge_coverage"):
             sys.exit(
@@ -3042,9 +3219,12 @@ def main() -> None:
                 "Run: python scripts/judge_batch.py --only-fallbacks ... until 0 "
                 "fallbacks, then re-run evaluate. See judge_coverage_report.csv."
             )
+        # Default: do NOT abort. Surface a WARN flag (judge_coverage_summary.json,
+        # judge_coverage_report.csv, eval_summary.txt) and keep going.
         warnings.warn(
-            "[JUDGE-GATE] coverage gate would FAIL, but require_judge_coverage is "
-            "false (pilot/backup mode) — continuing. Do NOT cite these numbers.",
+            "[JUDGE-GATE] judge coverage incomplete (judge_fallback rows remain) — "
+            "require_judge_coverage is false, continuing. See "
+            "judge_coverage_summary.json (flag=WARN). Treat affected numbers with care.",
             stacklevel=2,
         )
 
@@ -3145,6 +3325,36 @@ def main() -> None:
         clean_below_stop_path = output_dir / "clean_below_stop_tasks.csv"
         pd.DataFrame(clean_below_stop_rows).to_csv(clean_below_stop_path, index=False)
         print(f"[OK] {clean_below_stop_path}  ({len(clean_below_stop_rows)} rows)")
+
+    # ---- Phase 2: derived (secondary) metrics for continuation runs ----
+    # Decoy anchoring, recovery inflation, length bins, behavioral markers,
+    # confidence, cost/throughput. Uses the JUDGE-corrected _correct already set by
+    # score_runs(). Gated on continuation rows (decoy/inflation are continuation-only).
+    if config.get("derived_metrics", True):
+        continuation_runs = [
+            r for r in adversarial_runs if r.get("generation_mode") == "continuation"
+        ]
+        if continuation_runs:
+            complete_path = _resolve_path(config["complete_dialogues_path"])
+            tasks_path = _resolve_path(config["tasks_path"])
+            complete = load_runs(complete_path)
+            tasks = load_runs(tasks_path)
+            if not complete:
+                warnings.warn(
+                    f"[WARN] complete_dialogues not found ({complete_path}); "
+                    "token_economy/cost_throughput intermediate tokens will be 0.",
+                    stacklevel=2,
+                )
+            derived = derived_metrics.compute_all(
+                continuation_runs, complete, baselines, tasks,
+                load_tokenizer=not args.dry_run,
+            )
+            for stem, rows in derived.items():
+                path = output_dir / f"{stem}.csv"
+                pd.DataFrame(rows).to_csv(path, index=False)
+                print(f"[OK] {path}  ({len(rows)} rows)")
+        else:
+            print("[INFO] No continuation rows; skipping derived (secondary) metrics.")
 
     agreement_path = write_grading_agreement_report(
         runs=runs,

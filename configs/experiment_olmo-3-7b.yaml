@@ -1,0 +1,36 @@
+# Per-model overlay for allenai/Olmo-3-7B-Think (slug: olmo-3-7b).
+# Merge with configs/experiment.yaml when running Script 3 / evaluate for OLMo.
+#
+# Usage:
+#   python scripts/run_adaptive_dialogue.py \
+#     --config configs/experiment.yaml \
+#     --model-name allenai/Olmo-3-7B-Think \
+#     --baseline-file data/baselines/olmo-3-7b/baseline_cots_continuation.jsonl \
+#     --injections-file data/injections_generated_olmo-3-7b.jsonl \
+#     --complete-dialogues-file data/olmo-3-7b/complete_dialogues.jsonl
+
+model:
+  name: allenai/Olmo-3-7B-Think
+  backend: vllm
+  max_model_len: 16384
+  gpu_memory_utilization: 0.90
+
+script3:
+  baseline_file: data/baselines/olmo-3-7b/baseline_cots.jsonl
+  injections_file: data/injections_generated_olmo-3-7b.jsonl
+  output_file: data/olmo-3-7b/post_injection_runs.jsonl
+  complete_dialogues_file: data/olmo-3-7b/complete_dialogues.jsonl
+  prompt_audit_dir: data/olmo-3-7b/prompt_audit
+  continuation:
+    baseline_file: data/baselines/olmo-3-7b/baseline_cots_continuation.jsonl
+
+paths:
+  injections: data/injections_generated_olmo-3-7b.jsonl
+
+injection:
+  generated_file: data/injections_generated_olmo-3-7b.jsonl
+
+script4:
+  input_path: data/olmo-3-7b/post_injection_runs.jsonl
+  baseline_path: data/baselines/olmo-3-7b/baseline_cots.jsonl
+  output_dir: results/olmo-3-7b

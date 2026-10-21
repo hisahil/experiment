@@ -216,6 +216,15 @@ def segment_cot(
 # from picking a degenerate-but-correct sample. The solvability vote is untouched.
 DEFAULT_RUNAWAY_MAX_STEPS = 100
 DEFAULT_LOOP_REPEAT_THRESHOLD = 5
+DEFAULT_INTRA_REPEAT_LEN = 40
+DEFAULT_INTRA_REPEAT_THRESHOLD = 5
+
+# Prompt-echo patterns seen when Gemma loops on Script-1 instructions.
+_PROMPT_ECHO_PATTERNS = (
+    re.compile(r"Final answer:\s*<answer>", re.IGNORECASE),
+    re.compile(r"\(continue with Final", re.IGNORECASE),
+    re.compile(r"Step\s*\.\s*as needed", re.IGNORECASE),
+)
 
 
 def _normalize_step_body(step: str) -> str:
@@ -224,11 +233,39 @@ def _normalize_step_body(step: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def _detect_intra_text_repetition(
+    text: str,
+    *,
+    chunk_len: int = DEFAULT_INTRA_REPEAT_LEN,
+    repeat_threshold: int = DEFAULT_INTRA_REPEAT_THRESHOLD,
+) -> bool:
+    """True when any normalized chunk of length chunk_len repeats >= repeat_threshold."""
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    if len(normalized) < chunk_len * repeat_threshold:
+        return False
+    counts: dict[str, int] = {}
+    step = max(1, chunk_len // 4)
+    for i in range(0, len(normalized) - chunk_len + 1, step):
+        chunk = normalized[i : i + chunk_len]
+        if len(chunk.strip()) < chunk_len // 2:
+            continue
+        counts[chunk] = counts.get(chunk, 0) + 1
+        if counts[chunk] >= repeat_threshold:
+            return True
+    return False
+
+
+def _detect_prompt_echo(text: str) -> bool:
+    """True when the raw output echoes Script-1 placeholder/instruction fragments."""
+    return any(p.search(text) for p in _PROMPT_ECHO_PATTERNS)
+
+
 def detect_degenerate_trace(
     steps: list[str],
     *,
     max_steps: int = DEFAULT_RUNAWAY_MAX_STEPS,
     loop_repeat_threshold: int = DEFAULT_LOOP_REPEAT_THRESHOLD,
+    raw_text: str | None = None,
 ) -> tuple[bool, str | None]:
     """
     Flag runaway/loop traces so they are not chosen as the baseline CoT.
@@ -236,11 +273,18 @@ def detect_degenerate_trace(
     Returns (is_degenerate, reason). A trace is degenerate when:
       - step_count > max_steps (step explosion / runaway generation), or
       - any non-trivial step body repeats >= loop_repeat_threshold times
-        (a generation loop emitting near-identical steps).
+        (a generation loop emitting near-identical steps), or
+      - raw_text shows intra-blob repetition or prompt-echo (step_count=1 loops).
 
     Conservative by design: exact normalized-body repetition only, so legitimate
     long or backtracking traces (distinct step content) are not flagged.
     """
+    if raw_text:
+        if _detect_prompt_echo(raw_text):
+            return True, "prompt_echo"
+        if _detect_intra_text_repetition(raw_text):
+            return True, "intra_text_repeat"
+
     n = len(steps)
     if n > max_steps:
         return True, f"step_count>{max_steps}"

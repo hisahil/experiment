@@ -14,6 +14,7 @@ from llm_backend import (  # noqa: E402
     DryRunBackend,
     build_continuation_prompt,
     strip_think_closure,
+    _coerce_prompt_string,
 )
 from model_family import set_active_model_family  # noqa: E402
 
@@ -94,6 +95,45 @@ class StripThinkClosureTests(unittest.TestCase):
     def test_removes_stray_open_tag(self) -> None:
         text = "<think>extra open"
         self.assertEqual(strip_think_closure(text), "extra open")
+
+
+class CoercePromptStringTests(unittest.TestCase):
+    def test_message_list_coerced_to_string(self) -> None:
+        messages = [
+            {"role": "user", "content": "Q"},
+            {"role": "assistant", "content": "[THINK]trace"},
+        ]
+        out = _coerce_prompt_string(messages)
+        self.assertIsInstance(out, str)
+        self.assertIn("Q", out)
+        self.assertIn("trace", out)
+
+    def test_token_id_list_decoded(self) -> None:
+        class Tok:
+            def decode(self, ids):
+                return "decoded-" + str(len(ids))
+
+        out = _coerce_prompt_string([1, 2, 3], Tok())
+        self.assertEqual(out, "decoded-3")
+
+    def test_generate_from_trace_batch_accepts_message_list_prompts(self) -> None:
+        class ListPromptTokenizer(FakeTokenizer):
+            def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+                # Emulate Ministral: return messages list instead of rendered str.
+                return list(messages)
+
+        backend = DryRunBackend()
+        backend.tokenizer = ListPromptTokenizer()
+        results = backend.generate_from_trace_batch(
+            [("Q", "trace", None)],
+            max_new_tokens=64,
+            temperature=0.0,
+            top_p=1.0,
+            seeds=[42],
+        )
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0].rendered_prompt, str)
+        self.assertIsInstance(results[0].prompt_sha256, str)
 
 
 class GenerateFromTraceBatchTests(unittest.TestCase):

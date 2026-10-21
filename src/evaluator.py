@@ -416,6 +416,12 @@ _PROSE_NUMBER_RE = re.compile(
     r"([-+]?\d+(?:\.\d+)?(?:\s*/\s*\d+)?)\s*%?\s*\.?\s*$",
     re.IGNORECASE,
 )
+_PROSE_MINIMUM_RE = re.compile(
+    r"(?:the\s+)?(?:minimum|smallest|least)\s+(?:\w+\s+){0,4}"
+    r"(?:is|are|of)\s+(?:approximately\s+|about\s+)?"
+    r"([-+]?\d+(?:\.\d+)?(?:\s*/\s*\d+)?)\s*(?:°|degrees?)?\s*\.?\s*$",
+    re.IGNORECASE,
+)
 
 
 def _extract_prose_final_answer(body: str) -> str | None:
@@ -435,6 +441,9 @@ def _extract_prose_final_answer(body: str) -> str | None:
             # take the LAST tuple, not a given point mentioned earlier in the line.
             return re.sub(r"\s+", "", tups[-1])
         if len(line) <= 200:
+            minimum = _PROSE_MINIMUM_RE.search(line)
+            if minimum:
+                return minimum.group(1).replace(" ", "")
             num = _PROSE_NUMBER_RE.search(line)
             if num:
                 return num.group(1).replace(" ", "")
@@ -470,6 +479,15 @@ def _extract_math_answer(text: str, *, prefer_first_boxed: bool = False) -> str 
     to EOF (no flow-text heuristics earlier in the completion).
     """
     stripped = text.strip()
+    if prefer_first_boxed:
+        from first_commit import extract_stop_commitment
+
+        commitment = extract_stop_commitment(stripped)
+        if commitment["anchor_found"]:
+            if commitment["incomplete"] or not commitment["answer"]:
+                return None
+            return _normalize_math_extracted(commitment["answer"])
+
     body = _strip_thinking_suffix(stripped)
 
     # Prefer a region anchored on an explicit TEXTUAL marker (Final Answer / Answer
@@ -700,6 +718,31 @@ def gross_numeric_mismatch(
         return False
 
 
+def _parse_variable_assignment(text: str) -> tuple[str, str] | None:
+    """Parse a single-variable assignment like x=5 (case-insensitive)."""
+    match = re.fullmatch(
+        r"([a-z])\s*=\s*(.+)",
+        text.strip().lower(),
+    )
+    if not match:
+        return None
+    return match.group(1), match.group(2).strip()
+
+
+def _align_variable_assignment(parsed_answer: str, gold_answer: str) -> tuple[str, str]:
+    """Treat bare numeric predictions as equivalent to x=<val> gold forms."""
+    gold_var = _parse_variable_assignment(gold_answer)
+    if not gold_var:
+        return parsed_answer, gold_answer
+    var, gold_val = gold_var
+    pred_var = _parse_variable_assignment(parsed_answer)
+    if pred_var and pred_var[0] == var:
+        return pred_var[1], gold_val
+    if re.fullmatch(r"[-+]?\d+(?:\.\d+)?(?:\s*/\s*\d+)?", parsed_answer.strip()):
+        return parsed_answer.strip(), gold_val
+    return parsed_answer, gold_answer
+
+
 def normalize_answer(answer: str, eval_type: str) -> str:
     text = answer.strip()
     if eval_type in {"numeric", "symbolic"}:
@@ -749,19 +792,26 @@ def numeric_close(pred: float, gold: float, tolerance: float = 1e-4) -> bool:
 
 def _normalize_latex_for_sympy(text: str) -> str:
     expr = text.strip().replace("π", "pi")
+    # Currency / math-mode wrappers seen in MATH gold and model finals.
+    expr = expr.replace(r"\$", "").replace("$", "")
     expr = re.sub(r"\\text\{([^}]*)\}", r"\1", expr)
     expr = expr.replace(r"\pi", "pi")
     expr = expr.replace(r"\cdot", "*")
     expr = expr.replace(r"\times", "*")
     expr = expr.replace(r"\left", "").replace(r"\right", "")
+    # Collapse whitespace early so "\frac 34" matches shorthand frac rules.
+    expr = re.sub(r"\s+", "", expr)
     expr = re.sub(r"\\sqrt\{([^}]+)\}", r"sqrt(\1)", expr)
+    # Braced frac first, then common MATH shorthand forms without both braces.
     expr = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"((\1)/(\2))", expr)
+    expr = re.sub(r"\\frac\{([^}]+)\}([A-Za-z0-9.+-]+)", r"((\1)/(\2))", expr)
+    expr = re.sub(r"\\frac([A-Za-z0-9.+-]+)\{([^}]+)\}", r"((\1)/(\2))", expr)
+    expr = re.sub(r"\\frac([A-Za-z0-9.+-])([A-Za-z0-9.+-])", r"((\1)/(\2))", expr)
     expr = expr.replace("{", "(").replace("}", ")")
     expr = re.sub(r"(?<=\d)i\b", "*I", expr)
     expr = re.sub(r"\bi\b", "I", expr)
     expr = re.sub(r"(?<=\d)I\b", "*I", expr)
     expr = re.sub(r"(?<=\d)([a-zA-Z])", r"*\1", expr)
-    expr = re.sub(r"\s+", "", expr)
     return expr
 
 
@@ -922,6 +972,7 @@ def is_correct(
             return equiv
         return normalize_answer(parsed_answer, "exact") == normalize_answer(gold_answer, "exact")
     if eval_type == "symbolic":
+        parsed_answer, gold_answer = _align_variable_assignment(parsed_answer, gold_answer)
         equiv = sympy_equivalent(parsed_answer, gold_answer, math_tolerance=math_tolerance)
         if equiv is not None:
             return equiv

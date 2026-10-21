@@ -1,0 +1,711 @@
+# Off-topic theme pool for the `off_topic` error type (Script 2).
+#
+# English only. Each dialogue draws ONE theme (seed-based). For k>1 the same
+# theme is continued with a NEW aspect per injection (no repetition).
+#
+# Zero overlap with von Recum et al.'s UNRELATED_TOPICS (rllm_robustness/
+# constants.py, 100 entries) -- neither literal nor regional/epochal. Their pool
+# is science / ancient-civilisation / fine-art / tech heavy; this pool is
+# deliberately built from food, everyday life, regional culture, sport, craft
+# and landscape themes to stay disjoint. Do NOT add: tea, chess, Japanese tea
+# ceremony, the Silk Road, Viking longships, the Great Wall, Chinese
+# calligraphy, the printing press, jazz, astrophotography, or any Recum entry.
+#
+# Themes must have NO connection to mathematics (no numbers, formulas,
+# calculations, or quantitative claims): off_topic measures whether the model
+# can ignore irrelevant material in its own trace and return to the problem.
+
+themes:
+  - id: 1
+    theme: "The history of coffee cultivation"
+    category: food
+  - id: 2
+    theme: "Regional cheese varieties and how they are aged"
+    category: food
+  - id: 3
+    theme: "Why people keep pets"
+    category: everyday
+  - id: 4
+    theme: "The evolution of the toothbrush"
+    category: everyday
+  - id: 5
+    theme: "Traditional bread-making techniques around the world"
+    category: food
+  - id: 6
+    theme: "Winemaking in ancient Georgia"
+    category: food
+  - id: 7
+    theme: "The rise of the postal system in the 18th century"
+    category: history
+  - id: 8
+    theme: "Street food cultures of Southeast Asia"
+    category: food
+  - id: 9
+    theme: "The invention of the tin can"
+    category: everyday
+  - id: 10
+    theme: "Chocolate making from bean to bar"
+    category: food
+  - id: 11
+    theme: "The fjord landscapes of Norway"
+    category: geography
+  - id: 12
+    theme: "The landscape of the Dolomites"
+    category: geography
+  - id: 13
+    theme: "Island nations of the Pacific"
+    category: geography
+  - id: 14
+    theme: "Cave systems of Slovenia"
+    category: geography
+  - id: 15
+    theme: "Nomadic life in Mongolia"
+    category: culture
+  - id: 16
+    theme: "Volcanic islands and how they are settled"
+    category: geography
+  - id: 17
+    theme: "The tides of the North Sea"
+    category: nature
+  - id: 18
+    theme: "Oasis towns of Morocco"
+    category: geography
+  - id: 19
+    theme: "The glaciers of Patagonia"
+    category: geography
+  - id: 20
+    theme: "Mangrove forests as coastal protection"
+    category: nature
+  - id: 21
+    theme: "Yurt construction in Central Asia"
+    category: culture
+  - id: 22
+    theme: "The architecture of Gothic cathedrals"
+    category: culture
+  - id: 23
+    theme: "Bedouin falconry on the Arabian Peninsula"
+    category: culture
+  - id: 24
+    theme: "Trade routes of the Hanseatic League"
+    category: history
+  - id: 25
+    theme: "Etruscan tomb painting in Italy"
+    category: history
+  - id: 26
+    theme: "The University of Timbuktu in the 14th century"
+    category: history
+  - id: 27
+    theme: "The Mediterranean olive oil trade"
+    category: food
+  - id: 28
+    theme: "Terraced rice fields of the Ifugao in the Philippines"
+    category: culture
+  - id: 29
+    theme: "The hammam tradition in North Africa"
+    category: culture
+  - id: 30
+    theme: "Polynesian star navigation and wayfinding"
+    category: culture
+  - id: 31
+    theme: "The board game Go in East Asia"
+    category: sport
+  - id: 32
+    theme: "Underwater hockey as a niche sport"
+    category: sport
+  - id: 33
+    theme: "Marathon running and its ancient origins"
+    category: sport
+  - id: 34
+    theme: "Professional table tennis tactics"
+    category: sport
+  - id: 35
+    theme: "The tradition of archery in Korea"
+    category: sport
+  - id: 36
+    theme: "Curling and the craft of sweeping ice"
+    category: sport
+  - id: 37
+    theme: "Capoeira as dance and martial art"
+    category: sport
+  - id: 38
+    theme: "Petanque in southern France"
+    category: sport
+  - id: 39
+    theme: "Hang gliding and riding thermals"
+    category: sport
+  - id: 40
+    theme: "Sumo wrestling and its rituals"
+    category: sport
+  - id: 41
+    theme: "Indonesian wayang shadow puppetry"
+    category: art
+  - id: 42
+    theme: "The craft of glassblowing in Murano"
+    category: art
+  - id: 43
+    theme: "Persian carpet weaving"
+    category: art
+  - id: 44
+    theme: "Graffiti as an urban art form"
+    category: art
+  - id: 45
+    theme: "Sami reindeer herding in Lapland"
+    category: culture
+  - id: 46
+    theme: "Flamenco guitar making in Andalusia"
+    category: art
+  - id: 47
+    theme: "Turkish ebru paper marbling"
+    category: art
+  - id: 48
+    theme: "Mosaics in Byzantine churches"
+    category: art
+  - id: 49
+    theme: "Batik dyeing techniques on Java"
+    category: art
+  - id: 50
+    theme: "Early portrait photography studios"
+    category: art
+  - id: 51
+    theme: "Making sourdough starters and keeping them alive"
+    category: food
+  - id: 52
+    theme: "The art of pickling vegetables for winter"
+    category: food
+  - id: 53
+    theme: "Regional barbecue styles across the American South"
+    category: food
+  - id: 54
+    theme: "How maple syrup is tapped and boiled"
+    category: food
+  - id: 55
+    theme: "Traditional dumpling folding techniques"
+    category: food
+  - id: 56
+    theme: "Fermenting kimchi in earthenware pots"
+    category: food
+  - id: 57
+    theme: "The ritual of the Sunday roast in Britain"
+    category: food
+  - id: 58
+    theme: "Smoking fish over alder wood"
+    category: food
+  - id: 59
+    theme: "Making fresh pasta by hand"
+    category: food
+  - id: 60
+    theme: "The spice markets of Marrakech"
+    category: food
+  - id: 61
+    theme: "Curing hams in mountain cellars"
+    category: food
+  - id: 62
+    theme: "How ice cream is churned"
+    category: food
+  - id: 63
+    theme: "Foraging for wild mushrooms in autumn"
+    category: food
+  - id: 64
+    theme: "Brewing kombucha at home"
+    category: food
+  - id: 65
+    theme: "Making jam from summer berries"
+    category: food
+  - id: 66
+    theme: "Roasting chestnuts on winter streets"
+    category: food
+  - id: 67
+    theme: "Preparing a Moroccan tagine"
+    category: food
+  - id: 68
+    theme: "Making tofu from soybeans"
+    category: food
+  - id: 69
+    theme: "Preserving lemons in salt"
+    category: food
+  - id: 70
+    theme: "The tradition of the potluck dinner"
+    category: food
+  - id: 71
+    theme: "Baking gingerbread houses at Christmas"
+    category: food
+  - id: 72
+    theme: "The craft of hand-pulled noodles"
+    category: food
+  - id: 73
+    theme: "Organizing a home pantry"
+    category: everyday
+  - id: 74
+    theme: "The habit of hanging laundry out to dry"
+    category: everyday
+  - id: 75
+    theme: "Choosing houseplants for a windowsill"
+    category: everyday
+  - id: 76
+    theme: "The routine of morning dog walks"
+    category: everyday
+  - id: 77
+    theme: "Ironing shirts neatly"
+    category: everyday
+  - id: 78
+    theme: "Restoring old wooden furniture"
+    category: everyday
+  - id: 79
+    theme: "Sorting and recycling household waste"
+    category: everyday
+  - id: 80
+    theme: "Keeping a tidy garden shed"
+    category: everyday
+  - id: 81
+    theme: "The art of gift wrapping"
+    category: everyday
+  - id: 82
+    theme: "Writing handwritten letters to friends"
+    category: everyday
+  - id: 83
+    theme: "Keeping a family photo album"
+    category: everyday
+  - id: 84
+    theme: "Composting kitchen scraps"
+    category: everyday
+  - id: 85
+    theme: "The ritual of spring cleaning"
+    category: everyday
+  - id: 86
+    theme: "Growing herbs on a kitchen windowsill"
+    category: everyday
+  - id: 87
+    theme: "Repairing a leaky kitchen faucet"
+    category: everyday
+  - id: 88
+    theme: "Making a house cozy for winter"
+    category: everyday
+  - id: 89
+    theme: "Knitting wool sweaters by the fireside"
+    category: craft
+  - id: 90
+    theme: "Whittling small figures from soft wood"
+    category: craft
+  - id: 91
+    theme: "The craft of bookbinding by hand"
+    category: craft
+  - id: 92
+    theme: "Candle making with beeswax"
+    category: craft
+  - id: 93
+    theme: "Pottery thrown on a foot-powered wheel"
+    category: craft
+  - id: 94
+    theme: "Weaving baskets from willow"
+    category: craft
+  - id: 95
+    theme: "Making soap from scratch"
+    category: craft
+  - id: 96
+    theme: "Quilting patchwork blankets"
+    category: craft
+  - id: 97
+    theme: "Leatherworking a pair of boots"
+    category: craft
+  - id: 98
+    theme: "Carving wooden spoons"
+    category: craft
+  - id: 99
+    theme: "Dyeing wool with plant dyes"
+    category: craft
+  - id: 100
+    theme: "Building birdhouses for the garden"
+    category: craft
+  - id: 101
+    theme: "Restoring vintage bicycles"
+    category: craft
+  - id: 102
+    theme: "Building model railways in miniature"
+    category: craft
+  - id: 103
+    theme: "The rules and rituals of cricket"
+    category: sport
+  - id: 104
+    theme: "Highland games and caber tossing"
+    category: sport
+  - id: 105
+    theme: "Sailing dinghies on a lake"
+    category: sport
+  - id: 106
+    theme: "Rock climbing on coastal cliffs"
+    category: sport
+  - id: 107
+    theme: "The tradition of Sunday cycling clubs"
+    category: sport
+  - id: 108
+    theme: "Ice skating on frozen canals"
+    category: sport
+  - id: 109
+    theme: "Fly fishing in mountain streams"
+    category: sport
+  - id: 110
+    theme: "The game of bowls on a village green"
+    category: sport
+  - id: 111
+    theme: "Kite flying festivals on the beach"
+    category: sport
+  - id: 112
+    theme: "Surfing culture on the Atlantic coast"
+    category: sport
+  - id: 113
+    theme: "Horseback riding across open moors"
+    category: sport
+  - id: 114
+    theme: "Playing dominoes in the town square"
+    category: sport
+  - id: 115
+    theme: "Skateboarding in urban parks"
+    category: sport
+  - id: 116
+    theme: "Cross-country skiing through pine forests"
+    category: sport
+  - id: 117
+    theme: "Dragon boat racing on the river"
+    category: sport
+  - id: 118
+    theme: "Darts in the local pub"
+    category: sport
+  - id: 119
+    theme: "The rolling hills of Tuscany"
+    category: geography
+  - id: 120
+    theme: "The salt flats of Bolivia"
+    category: geography
+  - id: 121
+    theme: "The moorlands of Scotland"
+    category: geography
+  - id: 122
+    theme: "The sand dunes of the Namib Desert"
+    category: geography
+  - id: 123
+    theme: "The rice terraces of Bali"
+    category: geography
+  - id: 124
+    theme: "The limestone karst towers of Guilin"
+    category: geography
+  - id: 125
+    theme: "The lavender fields of Provence"
+    category: geography
+  - id: 126
+    theme: "The waterfalls of Iceland"
+    category: geography
+  - id: 127
+    theme: "The prairies of the American Midwest"
+    category: geography
+  - id: 128
+    theme: "The coastal cliffs of Ireland"
+    category: geography
+  - id: 129
+    theme: "The river delta of the Mekong"
+    category: geography
+  - id: 130
+    theme: "The redwood forests of California"
+    category: geography
+  - id: 131
+    theme: "The vineyard terraces of the Douro Valley"
+    category: geography
+  - id: 132
+    theme: "The chalk cliffs of Dover"
+    category: geography
+  - id: 133
+    theme: "The bayous of Louisiana"
+    category: geography
+  - id: 134
+    theme: "The migration of monarch butterflies"
+    category: nature
+  - id: 135
+    theme: "How beavers build their dams"
+    category: nature
+  - id: 136
+    theme: "The nesting habits of storks on rooftops"
+    category: nature
+  - id: 137
+    theme: "Bees and the making of a hive"
+    category: nature
+  - id: 138
+    theme: "The life of a garden hedgehog"
+    category: nature
+  - id: 139
+    theme: "Owls hunting at night"
+    category: nature
+  - id: 140
+    theme: "The behavior of a wolf pack"
+    category: nature
+  - id: 141
+    theme: "Songbirds returning in spring"
+    category: nature
+  - id: 142
+    theme: "How squirrels store acorns for winter"
+    category: nature
+  - id: 143
+    theme: "Frogs and their spring chorus"
+    category: nature
+  - id: 144
+    theme: "Sheepdogs herding a flock"
+    category: nature
+  - id: 145
+    theme: "The courtship dance of cranes"
+    category: nature
+  - id: 146
+    theme: "Hummingbirds and garden flowers"
+    category: nature
+  - id: 147
+    theme: "Ants and their underground colonies"
+    category: nature
+  - id: 148
+    theme: "The habits of house cats"
+    category: nature
+  - id: 149
+    theme: "The wild horses of the Camargue"
+    category: nature
+  - id: 150
+    theme: "Bats roosting in old barns"
+    category: nature
+  - id: 151
+    theme: "The seasonal moulting of deer antlers"
+    category: nature
+  - id: 152
+    theme: "The first snowfall of winter"
+    category: weather
+  - id: 153
+    theme: "How fog rolls in over a harbor"
+    category: weather
+  - id: 154
+    theme: "The colors of autumn leaves"
+    category: weather
+  - id: 155
+    theme: "Summer thunderstorms on the plains"
+    category: weather
+  - id: 156
+    theme: "The arrival of the monsoon rains"
+    category: weather
+  - id: 157
+    theme: "Morning frost on windowpanes"
+    category: weather
+  - id: 158
+    theme: "Rainbows after a rain shower"
+    category: weather
+  - id: 159
+    theme: "The quiet of a snowy forest"
+    category: weather
+  - id: 160
+    theme: "Harvest season in the countryside"
+    category: weather
+  - id: 161
+    theme: "The romance of overnight train journeys"
+    category: travel
+  - id: 162
+    theme: "Canal boats on the English waterways"
+    category: travel
+  - id: 163
+    theme: "Hot air balloon rides over vineyards"
+    category: travel
+  - id: 164
+    theme: "The tradition of the family road trip"
+    category: travel
+  - id: 165
+    theme: "Ferries crossing the Baltic Sea"
+    category: travel
+  - id: 166
+    theme: "Cycling holidays through the Netherlands"
+    category: travel
+  - id: 167
+    theme: "Old lighthouses and their keepers"
+    category: travel
+  - id: 168
+    theme: "Horse-drawn carriages in old towns"
+    category: travel
+  - id: 169
+    theme: "Cable cars climbing mountain slopes"
+    category: travel
+  - id: 170
+    theme: "The gondolas of Venice"
+    category: travel
+  - id: 171
+    theme: "Riding a rickshaw through busy streets"
+    category: travel
+  - id: 172
+    theme: "The tram lines of Lisbon"
+    category: travel
+  - id: 173
+    theme: "The tradition of Irish folk fiddling"
+    category: music
+  - id: 174
+    theme: "Tango in the streets of Buenos Aires"
+    category: music
+  - id: 175
+    theme: "The making of Scottish bagpipes"
+    category: music
+  - id: 176
+    theme: "Steel drum bands of the Caribbean"
+    category: music
+  - id: 177
+    theme: "Fado singing in Lisbon taverns"
+    category: music
+  - id: 178
+    theme: "The waltz in Viennese ballrooms"
+    category: music
+  - id: 179
+    theme: "Drumming circles at summer gatherings"
+    category: music
+  - id: 180
+    theme: "Ballet rehearsals before a premiere"
+    category: music
+  - id: 181
+    theme: "The accordion in French cafe music"
+    category: music
+  - id: 182
+    theme: "Gospel choirs in Sunday services"
+    category: music
+  - id: 183
+    theme: "Country line dancing in barns"
+    category: music
+  - id: 184
+    theme: "The didgeridoo in Aboriginal music"
+    category: music
+  - id: 185
+    theme: "Salsa dancing in Havana"
+    category: music
+  - id: 186
+    theme: "Morris dancing in English villages"
+    category: music
+  - id: 187
+    theme: "The making of a tailored suit"
+    category: fashion
+  - id: 188
+    theme: "Traditional kimono dressing"
+    category: fashion
+  - id: 189
+    theme: "The Scottish kilt and its tartans"
+    category: fashion
+  - id: 190
+    theme: "How felt hats are shaped"
+    category: fashion
+  - id: 191
+    theme: "Cobblers repairing leather shoes"
+    category: fashion
+  - id: 192
+    theme: "Knitted Fair Isle jumpers"
+    category: fashion
+  - id: 193
+    theme: "Sari draping in India"
+    category: fashion
+  - id: 194
+    theme: "The making of cowboy boots"
+    category: fashion
+  - id: 195
+    theme: "Woolen ponchos of the Andes"
+    category: fashion
+  - id: 196
+    theme: "Lace-making by hand"
+    category: fashion
+  - id: 197
+    theme: "The beret in French fashion"
+    category: fashion
+  - id: 198
+    theme: "Lantern festivals on the water"
+    category: festival
+  - id: 199
+    theme: "The celebration of the harvest moon"
+    category: festival
+  - id: 200
+    theme: "Carnival parades in Rio"
+    category: festival
+  - id: 201
+    theme: "Midsummer bonfires in Scandinavia"
+    category: festival
+  - id: 202
+    theme: "The tradition of Thanksgiving dinner"
+    category: festival
+  - id: 203
+    theme: "Diwali and the festival of lights"
+    category: festival
+  - id: 204
+    theme: "May Day and dancing round the maypole"
+    category: festival
+  - id: 205
+    theme: "Halloween pumpkin carving"
+    category: festival
+  - id: 206
+    theme: "Christmas markets in Germany"
+    category: festival
+  - id: 207
+    theme: "New Year fireworks over harbors"
+    category: festival
+  - id: 208
+    theme: "The tomato-throwing festival of Bunol"
+    category: festival
+  - id: 209
+    theme: "Village harvest fairs"
+    category: festival
+  - id: 210
+    theme: "Birdwatching with binoculars"
+    category: hobby
+  - id: 211
+    theme: "Collecting vintage postage stamps"
+    category: hobby
+  - id: 212
+    theme: "Tending a vegetable allotment"
+    category: hobby
+  - id: 213
+    theme: "Building ships in bottles"
+    category: hobby
+  - id: 214
+    theme: "Fishing from a quiet pier"
+    category: hobby
+  - id: 215
+    theme: "Growing prize roses"
+    category: hobby
+  - id: 216
+    theme: "Restoring classic cars"
+    category: hobby
+  - id: 217
+    theme: "Metal detecting on the beach"
+    category: hobby
+  - id: 218
+    theme: "Keeping tropical fish in an aquarium"
+    category: hobby
+  - id: 219
+    theme: "Camping under the open sky"
+    category: hobby
+  - id: 220
+    theme: "The legend of the Loch Ness monster"
+    category: folklore
+  - id: 221
+    theme: "Tales of forest spirits in Slavic folklore"
+    category: folklore
+  - id: 222
+    theme: "The folklore of the four-leaf clover"
+    category: folklore
+  - id: 223
+    theme: "Stories of mermaids told by sailors"
+    category: folklore
+  - id: 224
+    theme: "The legend of Robin Hood"
+    category: folklore
+  - id: 225
+    theme: "Dragons in European folklore"
+    category: folklore
+  - id: 226
+    theme: "The tradition of tooth fairy tales"
+    category: folklore
+  - id: 227
+    theme: "Trolls in Norwegian folklore"
+    category: folklore
+  - id: 228
+    theme: "The legend of El Dorado"
+    category: folklore
+  - id: 229
+    theme: "Ghost stories told around campfires"
+    category: folklore
+  - id: 230
+    theme: "Leprechauns in Irish tales"
+    category: folklore
+  - id: 231
+    theme: "The tale of the Pied Piper of Hamelin"
+    category: folklore

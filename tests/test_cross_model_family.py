@@ -169,8 +169,16 @@ class Gemma4PortageTests(unittest.TestCase):
         self.assertTrue(prefill.startswith("<|channel|>"))
         self.assertTrue(prefill.endswith("\\boxed{"))
 
+    def test_baseline_chat_prompt_uses_enable_thinking(self) -> None:
+        from llm_backend import build_baseline_prompt  # noqa: E402
+
+        template = (ROOT / "prompts/baseline_generation_gemma.txt").read_text(encoding="utf-8")
+        prompt = build_baseline_prompt(
+            FakeTokenizerGemma4(), template, "Q", use_chat_template=True,
+        )
+        self.assertIn("<|channel|>thought", prompt)
+
     def test_strip_think_closure_channel(self) -> None:
-        # After switching to Gemma, strip_think_closure must respect <|channel|>
         text = "reasoning<|channel|>final answer"
         self.assertEqual(strip_think_closure(text), "reasoning")
 
@@ -212,6 +220,13 @@ class MinistralPortageTests(unittest.TestCase):
         self.assertIn("--tokenizer_mode", flags)
         self.assertIn("mistral", flags)
         self.assertIn("--reasoning-parser", flags)
+
+    def test_family_stop_tokens(self) -> None:
+        from model_family import family_stop_tokens  # noqa: E402
+
+        stops = family_stop_tokens(self.MODEL)
+        self.assertIn("[/INST]", stops)
+        self.assertIn("</s>", stops)
 
 
 class CrossFamilySlugTests(unittest.TestCase):

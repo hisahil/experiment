@@ -45,8 +45,10 @@ pip install --upgrade pip --quiet
 # Legacy DeepSeek (vLLM 0.6.6) still uses cu121 below in the else branch only.
 echo "==> Installing PyTorch..."
 if [[ "$MODE" == "cross" ]]; then
-  # vLLM 0.24 pins torch; avoids download.pytorch.org SSL issues on some RunPod images.
-  echo "    (cross) deferring torch to vLLM 0.24.0 dependency resolution"
+  # Pin cu128 torch first — vLLM 0.24's default torch wheel can fail CUDA init on
+  # Vast PyTorch images (driver 570 / CUDA 12.8 reports "driver too old").
+  echo "    (cross) installing torch cu128 before vLLM 0.24.0"
+  pip install torch==2.11.0 torchvision --index-url https://download.pytorch.org/whl/cu128 --quiet
 else
   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121 --quiet
 fi
@@ -55,6 +57,8 @@ if [[ "$MODE" == "cross" ]]; then
   # ── Cross-model env: vLLM 0.24+, mistral_common, transformers (git) ────────
   echo "==> [cross-model] Installing vLLM 0.24.x (gemma4_unified) + mistral_common + transformers (git)..."
   pip install --upgrade "vllm==0.24.0" --quiet
+  # vLLM may upgrade torch to an incompatible build — re-pin cu128.
+  pip install torch==2.11.0 torchvision --index-url https://download.pytorch.org/whl/cu128 --quiet --force-reinstall
   pip install --upgrade "mistral_common>=1.8.6" --quiet
   # Gemma-4 needs gemma4_unified (not in transformers 5.0.0rc0 PyPI wheel).
   pip install --upgrade "git+https://github.com/huggingface/transformers.git" --quiet

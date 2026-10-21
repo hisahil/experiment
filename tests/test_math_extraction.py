@@ -109,6 +109,38 @@ class MathExtractionTests(unittest.TestCase):
         )
         self.assertIsNone(_extract_math_answer(text))
 
+    # ── Regression: geometry_538 (asked point P vs. given point A) ──────────────
+    def test_geometry_prefers_point_p_over_given_point_a(self):
+        # Both points appear in the concluding line; the asked point is P.
+        text = (
+            "Reflecting over the line, point A is (10, -10), "
+            "so the coordinates of point P are (8, -2)."
+        )
+        self.assertEqual(_extract_math_answer(text), "(8,-2)")
+        self.assertTrue(is_correct(_extract_math_answer(text), "(8,-2)", "symbolic"))
+
+    def test_geometry_no_label_takes_trailing_tuple(self):
+        # No point labels: the answer trails the sentence, not the first tuple.
+        text = "Starting from (10, -10) and translating, we arrive at (8, -2)."
+        self.assertEqual(_extract_math_answer(text), "(8,-2)")
+
+    # ── Regression: algebra_2391 (multi-boxed recovery, first after marker) ─────
+    def test_multi_boxed_first_after_textual_marker(self):
+        # Final-answer marker present; the committed value is the FIRST boxed,
+        # a trailing re-check \boxed{2} must NOT override it.
+        text = (
+            "Re-deriving the sum of the roots step by step.\n\n"
+            "**Final Answer:** The sum of the roots is \\boxed{10}, "
+            "since the leftover \\boxed{2} was only a partial term."
+        )
+        self.assertEqual(_extract_math_answer(text), "10")
+        self.assertTrue(is_correct(_extract_math_answer(text), "10", "symbolic"))
+
+    def test_multi_boxed_no_marker_keeps_last(self):
+        # Without a textual marker, the legacy last-boxed policy still applies.
+        text = "work \\boxed{2} then refine \\boxed{10}"
+        self.assertEqual(_extract_math_answer(text), "10")
+
 
 if __name__ == "__main__":
     unittest.main()

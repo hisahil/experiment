@@ -69,7 +69,11 @@ from evaluator import (  # noqa: E402
     extract_final_answer,
     gross_numeric_mismatch,
 )
-from llm_backend import create_backend  # noqa: E402
+from llm_backend import (  # noqa: E402
+    build_baseline_prompt,
+    create_backend,
+    prepare_baseline_raw_text,
+)
 from model_family import apply_baseline_sampling, resolve_model_family  # noqa: E402
 
 DEFAULT_BASELINE_CONFIG = ROOT / "configs/baseline_generation.yaml"
@@ -86,7 +90,11 @@ def load_prompt_template(path: Path) -> str:
 
 
 def render_prompt(template: str, **kwargs: str) -> str:
-    return template.format(**kwargs)
+    """Replace {key} placeholders without interpreting LaTeX braces."""
+    out = template
+    for key, val in kwargs.items():
+        out = out.replace("{" + key + "}", val)
+    return out
 
 
 def load_tasks(path: Path, domain: str | None) -> list[dict]:
@@ -232,21 +240,35 @@ def generate_baseline(
     domain: str = "math",
     eval_type: str = "exact",
     seed: int | None = None,
-) -> tuple[str, list[str], str]:
-    prompt = render_prompt(prompt_template, task=task["prompt"])
-    # top_k is a Card-recommended sampling knob (Gemma=64, GLM=40); only
-    # relevant during baseline generation. Continuation-mode (Script 3b) stays
-    # uniform without top_k across all families (Recum Table 15).
+    family=None,
+) -> tuple[str, list[str], str, str]:
+    """Return (baseline_cot, steps, segmentation_method, raw_output)."""
+    task_text = task["prompt"]
+    use_chat = bool(getattr(family, "baseline_use_chat_template", False)) if family else False
+    strip_think = bool(getattr(family, "baseline_strip_think", False)) if family else False
+    prompt = build_baseline_prompt(
+        backend.tokenizer,
+        prompt_template,
+        task_text,
+        use_chat_template=use_chat,
+    )
     top_k = model_cfg.get("top_k")
+    rep_pen = model_cfg.get("repetition_penalty")
     result = backend.generate(
         prompt=prompt,
         max_new_tokens=int(model_cfg.get("max_new_tokens", 2048)),
         temperature=float(model_cfg.get("temperature", 0.6)),
         top_p=float(model_cfg.get("top_p", 0.95)),
         top_k=int(top_k) if top_k is not None else None,
+        repetition_penalty=float(rep_pen) if rep_pen is not None else None,
         seed=seed,
     )
     raw_text = result.text
+    # use_chat (Gemma) implies strip; strip_think (GLM) triggers strip without
+    # switching to the chat-template prompt, keeping the flat-text baseline
+    # prompt aligned with DeepSeek.
+    if use_chat or strip_think:
+        raw_text = prepare_baseline_raw_text(raw_text, think_tags=getattr(family, "think_tags", None))
     if dry_run:
         raw_text = _dry_run_pad_output(raw_text, str(task["gold_answer"]), min_steps)
 
@@ -256,14 +278,11 @@ def generate_baseline(
         backend=backend,
         model_cfg=model_cfg,
     )
-    # Use domain-aware extraction so math \boxed{} answers are stripped of their
-    # wrapper (extract_final_answer would leave the \boxed{} intact, making
-    # is_correct fail for symbolic MATH-500 answers like \frac{3}{4}).
     parsed = extract_domain_answer(raw_text, domain, eval_type)
     if parsed is None and dry_run:
         parsed = str(task["gold_answer"])
     baseline_cot = steps_to_baseline_cot(steps, parsed)
-    return baseline_cot, steps, method
+    return baseline_cot, steps, method, result.text
 
 
 def main() -> None:
@@ -289,6 +308,12 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Mock backend (no GPU)")
     parser.add_argument("--model", type=str, default=None, help="Single experiment model")
+    parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=None,
+        help="Override experiment.seed used for verification sample seeds",
+    )
     args = parser.parse_args()
 
     cfg = load_yaml(args.config)
@@ -303,7 +328,6 @@ def main() -> None:
     )
     samples_out_path = sample_detail_path(out_path)
     prompt_path = ROOT / merged.get("prompt", "prompts/baseline_generation.txt")
-    # Fixed number of majority-vote samples per task; falls back to legacy max_retries.
     n_samples = int(merged.get("verification_samples", merged.get("max_retries", 5)))
     majority = n_samples // 2 + 1  # ceil(n_samples / 2): 3 of 5
     min_steps = int(merged.get("min_steps", 3))
@@ -311,7 +335,11 @@ def main() -> None:
     # internal repetition loop) are excluded as baseline candidates so the
     # max(step_count) selection never picks a degenerate-but-correct sample.
     runaway_max_steps = int(merged.get("runaway_max_steps", DEFAULT_RUNAWAY_MAX_STEPS))
-    base_seed = int(experiment_cfg.get("experiment", {}).get("seed", 42))
+    base_seed = (
+        int(args.base_seed)
+        if args.base_seed is not None
+        else int(experiment_cfg.get("experiment", {}).get("seed", 42))
+    )
 
     model_cfg = dict(experiment_cfg["model"])
     judge_cfg = dict(experiment_cfg.get("judge", {}))
@@ -387,10 +415,17 @@ def main() -> None:
         # 0.6/0.95. Continuation-mode (Script 3b) keeps uniform 0.6/0.95.
         run_model_cfg = apply_baseline_sampling({**model_cfg, "name": model_name}, model_name)
         family = resolve_model_family(model_name)
+        if family.baseline_prompt:
+            prompt_path = ROOT / family.baseline_prompt
+        else:
+            prompt_path = ROOT / merged.get("prompt", "prompts/baseline_generation.txt")
+        prompt_template = load_prompt_template(prompt_path)
         print(
             f"  [family={family.name} slug={family.slug}] baseline sampling: "
             f"temp={run_model_cfg.get('temperature')} top_p={run_model_cfg.get('top_p')} "
-            f"top_k={run_model_cfg.get('top_k')}"
+            f"top_k={run_model_cfg.get('top_k')} "
+            f"chat_template={family.baseline_use_chat_template} "
+            f"prompt={prompt_path.relative_to(ROOT)}"
         )
         for task in tasks:
             key = f"{task['task_id']}|{model_name}"
@@ -409,7 +444,7 @@ def main() -> None:
             for attempt in range(n_samples):
                 seed = base_seed + attempt
                 try:
-                    baseline_cot, steps, seg_method = generate_baseline(
+                    baseline_cot, steps, seg_method, raw_output = generate_baseline(
                         backend,
                         prompt_template,
                         task,
@@ -419,6 +454,7 @@ def main() -> None:
                         domain=task.get("domain", "math"),
                         eval_type=eval_type,
                         seed=seed,
+                        family=family,
                     )
                 except Exception as exc:
                     # An errored run is a No vote, but never aborts the loop.
@@ -491,7 +527,7 @@ def main() -> None:
                 if correct:
                     n_correct += 1
                 is_degenerate, degenerate_reason = detect_degenerate_trace(
-                    steps, max_steps=runaway_max_steps
+                    steps, max_steps=runaway_max_steps, raw_text=raw_output
                 )
                 samples.append(
                     {
@@ -512,6 +548,7 @@ def main() -> None:
                         "degenerate_reason": degenerate_reason,
                         "judge_det_conflict": judge_det_conflict,
                         "sanity_gate_flipped": sanity_gate_flipped,
+                        "raw_output": raw_output,
                     }
                 )
 
@@ -610,6 +647,7 @@ def main() -> None:
                         "judge_det_conflict": bool(sample.get("judge_det_conflict")),
                         "sanity_gate_flipped": bool(sample.get("sanity_gate_flipped")),
                         "error": sample.get("error"),
+                        "raw_output": sample.get("raw_output"),
                     }
                 )
             replace_sample_records(

@@ -49,6 +49,12 @@ class VLLMConfig:
     flags: tuple[str, ...] = field(default_factory=tuple)
     max_model_len: int = 16384
     gpu_memory_utilization: float = 0.92
+    tokenizer_mode: str | None = None
+    config_format: str | None = None
+    load_format: str | None = None
+    stop_tokens: tuple[str, ...] = field(default_factory=tuple)
+    limit_mm_per_prompt: dict[str, int] | None = None
+    hf_overrides: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +67,14 @@ class ModelFamilyConfig:
     tokenizer_extra_kwargs: dict[str, Any]
     vllm: VLLMConfig
     continuation_sampling: dict[str, float | int] = field(default_factory=dict)
+    baseline_prompt: str | None = None
+    baseline_use_chat_template: bool = False
+    # Whether Script 1 should strip everything up to and including the model's
+    # closing think tag from raw_output before segmentation. Decoupled from
+    # baseline_use_chat_template so families that need the strip (GLM writes
+    # "Step N:" INSIDE the think block) can keep the flat-text prompt aligned
+    # with DeepSeek. See scripts/generate_baselines.py.
+    baseline_strip_think: bool = False
 
 
 DEFAULT_THINK_TAGS = ThinkTags()
@@ -88,10 +102,29 @@ def _parse_vllm(raw: dict[str, Any] | None) -> VLLMConfig:
         return VLLMConfig()
     serve = raw.get("vllm_serve") or {}
     engine = raw.get("vllm_engine") or {}
+    stop_tokens_raw = raw.get("stop_tokens") or []
     return VLLMConfig(
         flags=tuple(str(f) for f in (serve.get("flags") or [])),
         max_model_len=int(engine.get("max_model_len", 16384)),
         gpu_memory_utilization=float(engine.get("gpu_memory_utilization", 0.92)),
+        tokenizer_mode=(
+            str(engine["tokenizer_mode"]) if engine.get("tokenizer_mode") else None
+        ),
+        config_format=(
+            str(engine["config_format"]) if engine.get("config_format") else None
+        ),
+        load_format=(
+            str(engine["load_format"]) if engine.get("load_format") else None
+        ),
+        stop_tokens=tuple(str(t) for t in stop_tokens_raw),
+        limit_mm_per_prompt=(
+            {str(k): int(v) for k, v in engine["limit_mm_per_prompt"].items()}
+            if engine.get("limit_mm_per_prompt")
+            else None
+        ),
+        hf_overrides=(
+            dict(engine["hf_overrides"]) if engine.get("hf_overrides") else None
+        ),
     )
 
 
@@ -104,6 +137,9 @@ def _family_entry(name: str, entry: dict[str, Any], continuation: dict) -> Model
         tokenizer_extra_kwargs=dict(entry.get("tokenizer_extra_kwargs") or {}),
         vllm=_parse_vllm(entry),
         continuation_sampling=dict(continuation or {}),
+        baseline_prompt=entry.get("baseline_prompt"),
+        baseline_use_chat_template=bool(entry.get("baseline_use_chat_template", False)),
+        baseline_strip_think=bool(entry.get("baseline_strip_think", False)),
     )
 
 
@@ -254,6 +290,45 @@ def vllm_launch_argv(model_name: str) -> list[str]:
     args.extend(["--max-model-len", str(family.vllm.max_model_len)])
     args.extend(["--gpu-memory-utilization", str(family.vllm.gpu_memory_utilization)])
     return args
+
+
+def vllm_python_api_kwargs(model_name: str) -> dict[str, Any]:
+    """Family-specific kwargs for `vllm.LLM(...)` Python-API construction.
+
+    Mistral/Ministral requires `tokenizer_mode="mistral"`,
+    `config_format="mistral"`, `load_format="mistral"` — otherwise the HF
+    tokenizer route is used, which does not know the Mistral chat template
+    and the model emits its own `[INST]`/`[/INST]`/`[SYSTEM_PROMPT]` tokens
+    into the output (chat-template leak).
+
+    These fields are separate from `vllm_serve.flags` because `flags` targets
+    the `vllm serve` CLI, while our `VLLMBackend` uses the Python API which
+    accepts kwargs, not CLI args.
+    """
+    family = resolve_model_family(model_name)
+    kwargs: dict[str, Any] = {}
+    if family.vllm.tokenizer_mode:
+        kwargs["tokenizer_mode"] = family.vllm.tokenizer_mode
+    if family.vllm.config_format:
+        kwargs["config_format"] = family.vllm.config_format
+    if family.vllm.load_format:
+        kwargs["load_format"] = family.vllm.load_format
+    if family.vllm.limit_mm_per_prompt is not None:
+        kwargs["limit_mm_per_prompt"] = dict(family.vllm.limit_mm_per_prompt)
+    if family.vllm.hf_overrides is not None:
+        kwargs["hf_overrides"] = dict(family.vllm.hf_overrides)
+    return kwargs
+
+
+def family_stop_tokens(model_name: str | None = None) -> list[str]:
+    """Family-specific extra stop tokens for `SamplingParams(stop=[...])`.
+
+    Currently used for Ministral so the model does not continue generating
+    after emitting its own `[/INST]` / `[INST]` tokens (self-simulated new
+    turns). Empty for families without such artefacts (DeepSeek, GLM, Gemma).
+    """
+    family = resolve_model_family(model_name) if model_name else get_active_model_family()
+    return list(family.vllm.stop_tokens)
 
 
 def model_slug(model_name: str) -> str:

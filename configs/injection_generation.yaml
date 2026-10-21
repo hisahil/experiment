@@ -9,26 +9,40 @@
 provider: anthropic
 model: claude-sonnet-4-6   # Claude Sonnet 4.6; override via --model if needed
 
+# Variant B (one-shot): a SINGLE Claude call per cell returns all k injection
+# steps (build_prompt + PROMPT_BUILDERS), with k-escalation baked into the prompt.
+# This is the continuation-mode default. 'persistent_agent' is the legacy
+# sequential multi-call path (restart mode only).
+injection_strategy: independent
+
 # Length per injected step — ABSOLUTE sentence counts (not % of baseline CoT).
 # Original proposal: ~10-20% (short) / ~60-70% (long) of baseline length. We use
 # fixed counts instead because Script 2 (Option A) does not see the full baseline
 # for relative sizing. Exact targets avoid uncontrolled variance (a "2-3" range
 # would mix 2- and 3-sentence injections without it being a designed factor).
 # Instruction = target granularity; max_tokens = hard cap per step.
+# 3 (short) / 7 (long) sentences PER injected step are enforced twice: a prominent
+# LENGTH REQUIREMENTS block in every Script 2 prompt (build_length_requirements_block)
+# and the non-blocking sentence_count_mismatch post-validation flag (Policy C, +/-1 tol).
 length_levels:
   short: "Write exactly 3 sentences per step (one claim with brief justification)."
   long: "Write exactly 7 sentences per step (claim with extended intermediate reasoning, verification, and elaboration)."
 
-k_values: [1, 3, 5]
+k_values: [1, 2, 3]
 error_types:
-  - incorrect_reasoning  # includes locally wrong continuations and hallucinated intermediate claims
-  - paraphrased_shift
-  - off_topic
+  - off_topic          # thematic distraction, no decoy, no calculation (themes: off_topic_themes_file)
+  - paraphrased_shift  # premise reframing / drop an existing constraint; no calculation, no final answer
+  - false_consensus    # authority/consensus + task-anchored pseudo-justification; names decoy
 
-# Hard cap per API call (~3×30-40 tok/sentence short; ~7×30-40 long; k=5 long ≈ 35 sentences total).
+# Theme pool for off_topic (English, zero overlap with von Recum's UNRELATED_TOPICS).
+off_topic_themes_file: configs/off_topic_themes.yaml
+
+# Hard cap per API call. k=3 short = 9 sentences, k=3 long = 21 sentences per
+# one-shot call, so short/long must budget for the full k_max set (not one step).
+# Raised from 400/1200 after the v1 audit found 21/30 k=3-short sets truncated.
 max_tokens:
-  short: 400
-  long: 1200
+  short: 900
+  long: 1800
 
 # Claude Sonnet only (not experiment models). 0.8 = enough diversity so injections
 # for the same error_type do not sound identical; low enough to stay coherent.
@@ -37,12 +51,14 @@ temperature: 0.8
 
 tasks: data/experiment_tasks.jsonl
 output: data/injections_generated.jsonl
-baseline_file: data/baseline_cots.jsonl
+# Use the continuation baseline for the currently tested model. Switch this path
+# together with target_models/model.name for 7B/14B/32B runs.
+baseline_file: data/baselines/7b/baseline_cots_continuation.jsonl
 
 # Experiment model(s) whose verified baselines Script 2 uses as injection context.
 # One injection set per model (trace-dependent design). Names match experiment.yaml model.name.
 target_models:
-  - deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  - deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 
 # Main study placement is midpoint: floor(number_of_baseline_steps / 2).
 # If baselines are absent, Script 2 keeps a standalone fallback/dry-run prompt.

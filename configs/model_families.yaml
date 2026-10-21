@@ -177,7 +177,8 @@ families:
       - allenai/Olmo-3
     slug: olmo-3-7b
     # Think variant emits <think>...</think> (Ai2 card).
-    # baseline_strip_think / baseline_use_chat_template: decide after smoke (O3/O4).
+    # Fair copy lives after </think>; strip like DeepSeek/GLM for Script 1.
+    baseline_strip_think: true
     think_tags:
       open: "<think>"
       close: "</think>"
@@ -194,6 +195,13 @@ families:
     vllm_engine:
       max_model_len: 16384
       gpu_memory_utilization: 0.90
+      # vLLM's olmo2 loader expects a flat rope_parameters dict with rope_theta.
+      # Newer Olmo3 HF configs nest theta under sliding/full attention blocks;
+      # override flattens it so EngineCore can start (verified on RunPod v0.24).
+      hf_overrides:
+        rope_parameters:
+          rope_type: default
+          rope_theta: 500000.0
 
   phi_4_reasoning:
     match:

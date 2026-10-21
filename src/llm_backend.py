@@ -49,6 +49,36 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _coerce_prompt_string(prompt: Any, tokenizer: Any = None) -> str:
+    """Normalize a prompt to a string for hashing, audit logs, and vLLM input.
+
+    Mistral/Ministral tokenizers may return a message list (or token-id list)
+    from ``apply_chat_template`` even when ``tokenize=False`` is requested.
+    Downstream code (_sha256, rendered_prompt, vLLM batch) expects str.
+    """
+    if isinstance(prompt, str):
+        return prompt
+    if isinstance(prompt, list):
+        if prompt and isinstance(prompt[0], int):
+            if tokenizer is not None and hasattr(tokenizer, "decode"):
+                try:
+                    return tokenizer.decode(prompt)
+                except Exception:
+                    pass
+        if prompt and isinstance(prompt[0], dict):
+            if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
+                try:
+                    rendered = tokenizer.apply_chat_template(
+                        prompt, tokenize=False, add_generation_prompt=True,
+                    )
+                    if isinstance(rendered, str):
+                        return rendered
+                except Exception:
+                    pass
+            return _manual_chat_prompt(prompt)
+    return str(prompt)
+
+
 def count_tokens(tokenizer: Any, text: str) -> int:
     """Token count via the model tokenizer; word-count fallback when unavailable.
 
@@ -493,12 +523,111 @@ def build_continuation_prompt(
                 formatted = None
     if formatted is None:
         formatted = _manual_open_think_prompt(messages, think_tags=tags)
+    else:
+        formatted = _coerce_prompt_string(formatted, tokenizer)
 
     if reasoning_trace:
         formatted += reasoning_trace
     if stop_prefill:
         formatted += stop_prefill
     return formatted
+
+
+def build_baseline_prompt(
+    tokenizer: Any,
+    prompt_template: str,
+    task_text: str,
+    *,
+    system_instruction: str | None = None,
+    think_tags: Any = None,
+    tokenizer_extra_kwargs: dict | None = None,
+    use_chat_template: bool = False,
+) -> str:
+    """Render a Script-1 baseline prompt, optionally via the chat template.
+
+    When ``use_chat_template`` is True (Gemma 4), builds [system?, user] messages
+    and calls ``apply_chat_template(..., enable_thinking=True)`` so the model
+    enters its thinking channel instead of echoing a flat-text prompt.
+    """
+    user_content = prompt_template.replace("{task}", task_text)
+    if not use_chat_template:
+        return user_content
+
+    tags = _resolve_think_tags(think_tags)
+    if tokenizer_extra_kwargs is None:
+        try:
+            from model_family import get_active_model_family  # noqa: WPS433
+
+            extra_kwargs = dict(get_active_model_family().tokenizer_extra_kwargs)
+        except Exception:
+            extra_kwargs = {}
+    else:
+        extra_kwargs = dict(tokenizer_extra_kwargs)
+
+    resolved_system = system_instruction
+    if tags.trigger:
+        if resolved_system:
+            resolved_system = f"{tags.trigger}\n{resolved_system}"
+        else:
+            resolved_system = tags.trigger
+
+    messages: list[Message] = []
+    if resolved_system:
+        messages.append({"role": "system", "content": resolved_system})
+    messages.append({"role": "user", "content": user_content})
+
+    if tokenizer is not None and hasattr(tokenizer, "apply_chat_template"):
+        try:
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                **extra_kwargs,
+            )
+        except (TypeError, ValueError, NotImplementedError):
+            if extra_kwargs:
+                try:
+                    return tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                except (TypeError, ValueError, NotImplementedError):
+                    pass
+    return _manual_open_think_prompt(messages, think_tags=tags)
+
+
+def prepare_baseline_raw_text(raw_text: str, *, think_tags: Any = None) -> str:
+    """Strip the thinking channel and keep the visible answer region for Script 1.
+
+    Uses the family close-tag when present; otherwise returns the raw text unchanged.
+    Also recognizes malformed OLMo close markers such as ``</think#`` (missing `>`).
+    """
+    tags = _resolve_think_tags(think_tags)
+    close = tags.close
+    idx = raw_text.rfind(close)
+    cut_len = len(close) if idx != -1 else -1
+
+    # Malformed close: close-tag stem not followed by '>' (e.g. "</think#").
+    # Do not treat a proper close as malformed — that would leave a stray '>'.
+    if close.endswith(">"):
+        stem = close[:-1]
+        for m in re.finditer(re.escape(stem) + r"(?![>])[^\n]*", raw_text):
+            if m.start() >= idx:
+                idx = m.start()
+                cut_len = m.end() - m.start()
+
+    if idx != -1 and cut_len > 0:
+        visible = raw_text[idx + cut_len :].strip()
+        if visible:
+            return visible
+    return raw_text.strip()
+
+
+def _sampling_repetition_penalty(repetition_penalty: float | None) -> float | None:
+    """Return a vLLM/HF repetition_penalty when it differs from the neutral default."""
+    if repetition_penalty is None:
+        return None
+    val = float(repetition_penalty)
+    return val if val != 1.0 else None
 
 
 def _truncate_at_stop(text: str, stop: list[str] | None) -> tuple[str, bool]:
@@ -554,6 +683,7 @@ class BaseBackend:
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> GenerationResult:
         raise NotImplementedError
 
@@ -567,6 +697,7 @@ class BaseBackend:
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> list[GenerationResult]:
         """Submit multiple prompts; base implementation is sequential."""
         seed_list = _expand_seeds(seeds, len(prompts))
@@ -574,6 +705,7 @@ class BaseBackend:
             self.generate(
                 p, max_new_tokens, temperature, top_p, seed=s, stop=stop,
                 logprobs=logprobs, top_k=top_k,
+                repetition_penalty=repetition_penalty,
             )
             for p, s in zip(prompts, seed_list)
         ]
@@ -617,14 +749,17 @@ class BaseBackend:
         # Resolve tags once so every prompt in the batch uses the same family.
         resolved_tags = _resolve_think_tags(think_tags)
         prompts = [
-            build_continuation_prompt(
+            _coerce_prompt_string(
+                build_continuation_prompt(
+                    self.tokenizer,
+                    problem,
+                    trace,
+                    system=system,
+                    stop_prefill=pref,
+                    think_tags=resolved_tags,
+                    tokenizer_extra_kwargs=tokenizer_extra_kwargs,
+                ),
                 self.tokenizer,
-                problem,
-                trace,
-                system=system,
-                stop_prefill=pref,
-                think_tags=resolved_tags,
-                tokenizer_extra_kwargs=tokenizer_extra_kwargs,
             )
             for problem, trace, pref in items
         ]
@@ -757,6 +892,7 @@ class DryRunBackend(BaseBackend):
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> GenerationResult:
         start = time.time()
         if "\\boxed{" in prompt:
@@ -840,6 +976,7 @@ class TransformersBackend(BaseBackend):
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> list[GenerationResult]:
         """Sequential fallback — TransformersBackend does not support true batching."""
         import warnings
@@ -850,7 +987,10 @@ class TransformersBackend(BaseBackend):
         )
         seed_list = _expand_seeds(seeds, len(prompts))
         return [
-            self.generate(p, max_new_tokens, temperature, top_p, seed=s, stop=stop, top_k=top_k)
+            self.generate(
+                p, max_new_tokens, temperature, top_p, seed=s, stop=stop, top_k=top_k,
+                repetition_penalty=repetition_penalty,
+            )
             for p, s in zip(prompts, seed_list)
         ]
 
@@ -864,6 +1004,7 @@ class TransformersBackend(BaseBackend):
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> GenerationResult:
         import torch
 
@@ -885,6 +1026,9 @@ class TransformersBackend(BaseBackend):
             gen_kwargs["top_p"] = top_p
             if top_k is not None and top_k > 0:
                 gen_kwargs["top_k"] = int(top_k)
+        rep_pen = _sampling_repetition_penalty(repetition_penalty)
+        if rep_pen is not None:
+            gen_kwargs["repetition_penalty"] = rep_pen
         with torch.no_grad():
             outputs = self.model.generate(**inputs, **gen_kwargs)
         generated = outputs[0][prompt_tokens:]
@@ -928,16 +1072,60 @@ class VLLMBackend(BaseBackend):
         }
         if max_model_len is not None:
             llm_kwargs["max_model_len"] = int(max_model_len)
+        # Family-specific Python-API kwargs (Mistral needs tokenizer_mode=mistral
+        # etc.; without this the HF tokenizer route mis-renders the chat
+        # template and the model emits [/INST]/[SYSTEM_PROMPT] into outputs).
+        try:
+            from model_family import vllm_python_api_kwargs  # noqa: WPS433
+
+            llm_kwargs.update(vllm_python_api_kwargs(model_name))
+        except Exception:
+            pass
         self.llm = LLM(**llm_kwargs)
         self.model_name = model_name
         self.tokenizer = None
+        # Prefer the tokenizer that vLLM actually built (respects tokenizer_mode)
+        # so downstream chat-template rendering matches the runtime tokenizer.
         try:
-            from transformers import AutoTokenizer
-
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            tokenizer_getter = getattr(self.llm, "get_tokenizer", None)
+            if callable(tokenizer_getter):
+                self.tokenizer = tokenizer_getter()
         except Exception:
-            pass
+            self.tokenizer = None
+        if self.tokenizer is None:
+            try:
+                from transformers import AutoTokenizer
+
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    model_name, trust_remote_code=True
+                )
+            except Exception:
+                pass
         self.prompt_render_method = _infer_prompt_render_method(self.tokenizer)
+        # Cache family stop tokens so generate_batch() can inject them without a
+        # yaml re-parse per call.
+        try:
+            from model_family import family_stop_tokens  # noqa: WPS433
+
+            self._family_stop_tokens = list(family_stop_tokens(model_name))
+        except Exception:
+            self._family_stop_tokens = []
+
+    def _merge_stop(self, caller_stop: list[str] | None) -> list[str] | None:
+        """Merge caller-supplied stop sequences with family-specific stop tokens.
+
+        Family stops (e.g. Ministral [INST]/[/INST]) prevent chat-template leaks
+        where the model self-emits template tokens and simulates new user
+        turns. Returns None when both sources are empty so vLLM SamplingParams
+        skips the stop-list allocation entirely.
+        """
+        caller = list(caller_stop) if caller_stop else []
+        family = list(self._family_stop_tokens or [])
+        merged: list[str] = []
+        for tok in caller + family:
+            if tok and tok not in merged:
+                merged.append(tok)
+        return merged or None
 
     def format_messages(self, messages: list[Message], *, prefill: str | None = None) -> str:
         return messages_to_prompt(self.tokenizer, messages, prefill=prefill)
@@ -952,6 +1140,7 @@ class VLLMBackend(BaseBackend):
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> list[GenerationResult]:
         """Submit all prompts in one vLLM call for maximum GPU utilisation.
 
@@ -969,22 +1158,26 @@ class VLLMBackend(BaseBackend):
         from vllm import SamplingParams
 
         top_k_val = int(top_k) if (top_k is not None and top_k > 0) else -1
+        merged_stop = self._merge_stop(stop)
+        rep_pen = _sampling_repetition_penalty(repetition_penalty)
         seed_list = _expand_seeds(seeds, len(prompts))
+        sp_kwargs: dict = {
+            "max_tokens": max_new_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k_val,
+            "stop": merged_stop,
+            "logprobs": logprobs,
+        }
+        if rep_pen is not None:
+            sp_kwargs["repetition_penalty"] = rep_pen
         if any(s is not None for s in seed_list):
             params: list[SamplingParams] | SamplingParams = [
-                SamplingParams(
-                    max_tokens=max_new_tokens, temperature=temperature, top_p=top_p,
-                    top_k=top_k_val,
-                    seed=s, stop=stop, logprobs=logprobs,
-                )
+                SamplingParams(**sp_kwargs, seed=s)
                 for s in seed_list
             ]
         else:
-            params = SamplingParams(
-                max_tokens=max_new_tokens, temperature=temperature, top_p=top_p,
-                top_k=top_k_val,
-                stop=stop, logprobs=logprobs,
-            )
+            params = SamplingParams(**sp_kwargs)
         outputs = self.llm.generate(prompts, params)
         results: list[GenerationResult] = []
         for output in outputs:
@@ -1015,20 +1208,26 @@ class VLLMBackend(BaseBackend):
         stop: list[str] | None = None,
         logprobs: int | None = None,
         top_k: int | None = None,
+        repetition_penalty: float | None = None,
     ) -> GenerationResult:
         from vllm import SamplingParams
 
         top_k_val = int(top_k) if (top_k is not None and top_k > 0) else -1
+        merged_stop = self._merge_stop(stop)
         start = time.time()
-        params = SamplingParams(
-            max_tokens=max_new_tokens,
-            temperature=temperature,
-            seed=seed,
-            top_p=top_p,
-            top_k=top_k_val,
-            stop=stop,
-            logprobs=logprobs,
-        )
+        sp_kwargs: dict = {
+            "max_tokens": max_new_tokens,
+            "temperature": temperature,
+            "seed": seed,
+            "top_p": top_p,
+            "top_k": top_k_val,
+            "stop": merged_stop,
+            "logprobs": logprobs,
+        }
+        rep_pen = _sampling_repetition_penalty(repetition_penalty)
+        if rep_pen is not None:
+            sp_kwargs["repetition_penalty"] = rep_pen
+        params = SamplingParams(**sp_kwargs)
         outputs = self.llm.generate([prompt], params)
         output = outputs[0]  # RequestOutput — carries prompt_token_ids
         result = output.outputs[0]  # CompletionOutput — carries token_ids / text

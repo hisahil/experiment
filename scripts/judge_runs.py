@@ -161,9 +161,16 @@ def judge_row(
     gold = str(row.get("gold_answer", "") or "")
     question = task_question(task) or str(row.get("question", ""))
 
+    from first_commit import apply_empty_output, judge_visible_output
+
+    if apply_empty_output(row):
+        return "ok"
+
     # Re-extract (helps recovery extraction_failed cases) but keep the stored
     # extracted_answer when re-extraction finds nothing.
-    extracted = extract_domain_answer(raw_output, domain, eval_type)
+    extracted = extract_domain_answer(
+        raw_output, domain, eval_type, prefer_first_boxed=(row.get("variant") == "stop")
+    )
     if extracted is None:
         extracted = row.get("extracted_answer")
 
@@ -171,7 +178,7 @@ def judge_row(
         grading = grade_sample(
             question=question,
             gold_answer=gold,
-            answer_content=raw_output,
+            answer_content=judge_visible_output(row),
             extracted_answer=extracted,
             domain=domain,
             eval_type=eval_type,
